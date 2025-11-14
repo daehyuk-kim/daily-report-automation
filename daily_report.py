@@ -13,6 +13,7 @@ import threading
 from pathlib import Path
 from datetime import datetime, date
 from typing import Set, Dict, List, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import tkinter as tk
 from tkinter import ttk, filedialog, scrolledtext, messagebox
 
@@ -130,13 +131,14 @@ class DailyReportSystem:
         valid_exts = self.config['validation']['file_extensions']
         return ext in valid_exts
 
-    def scan_directory(self, equipment_id: str, log_callback) -> Set[str]:
+    def scan_directory(self, equipment_id: str, log_callback, max_depth: int = 2) -> Set[str]:
         """
-        장비 디렉토리 스캔 및 차트번호 추출
+        장비 디렉토리 스캔 및 차트번호 추출 (최적화 버전)
 
         Args:
             equipment_id: 장비 ID (SP, TOPO, OCT 등)
             log_callback: 로그 출력 콜백 함수
+            max_depth: 최대 탐색 깊이 (기본값: 2)
 
         Returns:
             차트번호 집합
@@ -154,45 +156,66 @@ class DailyReportSystem:
             return chart_numbers
 
         try:
-            # 파일 스캔
-            if scan_type in ['file', 'both']:
-                for file_path in path.rglob('*'):
-                    if not file_path.is_file():
+            today = date.today()
+
+            def scan_recursive(current_path: Path, depth: int = 0):
+                """재귀적으로 디렉토리 스캔 (깊이 제한)"""
+                if depth > max_depth:
+                    return
+
+                try:
+                    items = list(current_path.iterdir())
+                except (PermissionError, OSError):
+                    return
+
+                for item in items:
+                    try:
+                        # 날짜 체크를 먼저 해서 빠르게 필터링
+                        ctime = os.path.getctime(item)
+                        file_date = date.fromtimestamp(ctime)
+
+                        if file_date != today:
+                            continue
+
+                        # 날짜 필터 적용
+                        if date_filter:
+                            filter_date = datetime.strptime(date_filter, "%Y-%m-%d").date()
+                            if file_date < filter_date:
+                                continue
+
+                        # 파일 처리
+                        if item.is_file() and scan_type in ['file', 'both']:
+                            # 확장자 체크
+                            if not self.has_valid_extension(item):
+                                continue
+
+                            # 차트번호 추출
+                            filename = item.name
+                            match = re.search(pattern, filename)
+                            if match:
+                                chart_num = match.group(1)
+                                if self.is_valid_chart_number(chart_num):
+                                    chart_numbers.add(chart_num)
+
+                        # 폴더 처리
+                        elif item.is_dir():
+                            if scan_type == 'both':
+                                # OCT의 경우 폴더명에서도 차트번호 추출
+                                folder_name = item.name
+                                match = re.search(pattern, folder_name)
+                                if match:
+                                    chart_num = match.group(1)
+                                    if self.is_valid_chart_number(chart_num):
+                                        chart_numbers.add(chart_num)
+
+                            # 하위 디렉토리 탐색
+                            scan_recursive(item, depth + 1)
+
+                    except (OSError, ValueError):
                         continue
 
-                    # 확장자 체크
-                    if not self.has_valid_extension(file_path):
-                        continue
-
-                    # 날짜 체크
-                    if not self.is_today_file(file_path, date_filter):
-                        continue
-
-                    # 차트번호 추출
-                    filename = file_path.name
-                    match = re.search(pattern, filename)
-                    if match:
-                        chart_num = match.group(1)
-                        if self.is_valid_chart_number(chart_num):
-                            chart_numbers.add(chart_num)
-
-            # 폴더 스캔 (OCT의 경우)
-            if scan_type == 'both':
-                for folder_path in path.iterdir():
-                    if not folder_path.is_dir():
-                        continue
-
-                    # 날짜 체크
-                    if not self.is_today_file(folder_path, date_filter):
-                        continue
-
-                    # 차트번호 추출
-                    folder_name = folder_path.name
-                    match = re.search(pattern, folder_name)
-                    if match:
-                        chart_num = match.group(1)
-                        if self.is_valid_chart_number(chart_num):
-                            chart_numbers.add(chart_num)
+            # 스캔 시작
+            scan_recursive(path)
 
         except Exception as e:
             log_callback(f"  ❌ 오류: {equipment['name']} - {str(e)}")
