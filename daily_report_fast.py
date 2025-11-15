@@ -34,6 +34,7 @@ except ImportError:
 if sys.platform == 'win32':
     try:
         import win32com.client
+        import pythoncom
         HAS_WIN32 = True
     except ImportError:
         HAS_WIN32 = False
@@ -131,8 +132,10 @@ class DailyReportSystem:
             today_folder = self.get_today_folder_path(base_path, equipment_id)
 
             if today_folder is None:
-                # 폴더 구조가 없는 경우 (SP 등) 직접 스캔
+                # 폴더 구조가 없는 경우 (SP, HFA, IOL700 등) 직접 스캔
                 today_folder = base_path
+                use_creation_time = equipment.get('use_creation_time', False)
+
                 # 단일 폴더만 스캔 (os.listdir 사용)
                 if scan_type == 'file':
                     files = os.listdir(today_folder)
@@ -145,11 +148,25 @@ class DailyReportSystem:
                         if not any(file_name.lower().endswith(ext) for ext in self.config['validation']['file_extensions']):
                             continue
 
-                        # 파일명에서 날짜 확인 (yyyymmdd 형식)
-                        date_match = re.search(r'_(\d{8})\.', file_name)
-                        if date_match:
-                            file_date_str = date_match.group(1)
-                            if file_date_str != self.today.strftime('%Y%m%d'):
+                        # 날짜 필터링
+                        if use_creation_time:
+                            # 파일 생성일로 필터링 (HFA, IOL700 등)
+                            try:
+                                ctime = os.path.getctime(file_path)
+                                file_date = date.fromtimestamp(ctime)
+                                if file_date != self.today:
+                                    continue
+                            except:
+                                continue
+                        else:
+                            # 파일명에서 날짜 확인 (SP: _yyyymmdd. 형식)
+                            date_match = re.search(r'_(\d{8})\.', file_name)
+                            if date_match:
+                                file_date_str = date_match.group(1)
+                                if file_date_str != self.today.strftime('%Y%m%d'):
+                                    continue
+                            # 날짜 패턴이 없으면 건너뜀
+                            else:
                                 continue
 
                         # 차트번호 추출
@@ -388,20 +405,28 @@ class DailyReportSystem:
         try:
             os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
 
-            excel = win32com.client.Dispatch("Excel.Application")
-            excel.Visible = False
-            excel.DisplayAlerts = False
+            # COM 라이브러리 초기화
+            pythoncom.CoInitialize()
 
-            wb = excel.Workbooks.Open(os.path.abspath(excel_path))
-            ws = wb.Worksheets(self.config['target_sheet'])
+            try:
+                excel = win32com.client.Dispatch("Excel.Application")
+                excel.Visible = False
+                excel.DisplayAlerts = False
 
-            ws.ExportAsFixedFormat(0, os.path.abspath(pdf_path))
+                wb = excel.Workbooks.Open(os.path.abspath(excel_path))
+                ws = wb.Worksheets(self.config['target_sheet'])
 
-            wb.Close(SaveChanges=False)
-            excel.Quit()
+                ws.ExportAsFixedFormat(0, os.path.abspath(pdf_path))
 
-            log_callback(f"  ✓ PDF 생성 완료: {pdf_path}")
-            return True
+                wb.Close(SaveChanges=False)
+                excel.Quit()
+
+                log_callback(f"  ✓ PDF 생성 완료: {pdf_path}")
+                return True
+
+            finally:
+                # COM 라이브러리 정리
+                pythoncom.CoUninitialize()
 
         except Exception as e:
             log_callback(f"  ❌ PDF 변환 오류: {str(e)}")
