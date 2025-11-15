@@ -30,6 +30,12 @@ except ImportError:
     print("설치: pip install pandas")
     sys.exit(1)
 
+try:
+    import xlrd
+    HAS_XLRD = True
+except ImportError:
+    HAS_XLRD = False
+
 # Windows에서만 pywin32 임포트
 if sys.platform == 'win32':
     try:
@@ -135,10 +141,15 @@ class DailyReportSystem:
                 # 폴더 구조가 없는 경우 (SP, HFA, IOL700 등) 직접 스캔
                 today_folder = base_path
                 use_creation_time = equipment.get('use_creation_time', False)
+                log_callback(f"     📂 스캔 경로: {today_folder}")
+                log_callback(f"     🔍 날짜 확인: {'생성일' if use_creation_time else '파일명'}")
 
                 # 단일 폴더만 스캔 (os.listdir 사용)
                 if scan_type == 'file':
                     files = os.listdir(today_folder)
+                    total_files = len(files)
+                    scanned_files = 0
+
                     for file_name in files:
                         file_path = os.path.join(today_folder, file_name)
                         if not os.path.isfile(file_path):
@@ -147,6 +158,8 @@ class DailyReportSystem:
                         # 확장자 체크
                         if not any(file_name.lower().endswith(ext) for ext in self.config['validation']['file_extensions']):
                             continue
+
+                        scanned_files += 1
 
                         # 날짜 필터링
                         if use_creation_time:
@@ -176,10 +189,19 @@ class DailyReportSystem:
                             if self.is_valid_chart_number(chart_num):
                                 chart_numbers.add(chart_num)
 
+                    log_callback(f"     📊 전체: {total_files}개 / 스캔: {scanned_files}개 / 매칭: {len(chart_numbers)}건")
                 return chart_numbers
 
             # 오늘 폴더와 하위 폴더만 스캔 (os.walk 사용)
+            log_callback(f"     📂 스캔 경로: {today_folder}")
+
+            total_files_count = 0
+            total_dirs_count = 0
+
             for root, dirs, files in os.walk(today_folder):
+                total_files_count += len(files)
+                total_dirs_count += len(dirs)
+
                 # 파일 스캔
                 if scan_type in ['file', 'both']:
                     for file_name in files:
@@ -202,6 +224,11 @@ class DailyReportSystem:
                             chart_num = match.group(1)
                             if self.is_valid_chart_number(chart_num):
                                 chart_numbers.add(chart_num)
+
+            if scan_type == 'both':
+                log_callback(f"     📊 파일: {total_files_count}개 / 폴더: {total_dirs_count}개 / 매칭: {len(chart_numbers)}건")
+            else:
+                log_callback(f"     📊 파일: {total_files_count}개 / 매칭: {len(chart_numbers)}건")
 
         except Exception as e:
             log_callback(f"  ❌ 오류: {equipment['name']} - {str(e)}")
@@ -288,11 +315,49 @@ class DailyReportSystem:
         return len(fundus_charts)
 
     def process_reservation_file(self, file_path: str, log_callback) -> Dict[str, int]:
-        """예약 파일 처리"""
+        """예약 파일 처리 (.xlsx, .xls 모두 지원)"""
         counts = {'verion': 0, 'lensx': 0, 'ex500': 0}
         found_cells = set()
 
         try:
+            # .xls 파일인 경우 xlrd로 읽기
+            if file_path.lower().endswith('.xls') and not file_path.lower().endswith('.xlsx'):
+                if not HAS_XLRD:
+                    log_callback(f"  ⚠️  .xls 파일 읽기 실패: xlrd 라이브러리가 필요합니다")
+                    log_callback(f"     설치: pip install xlrd")
+                    return counts
+
+                # xlrd로 .xls 파일 읽기
+                import xlrd
+                xls_book = xlrd.open_workbook(file_path)
+
+                for sheet in xls_book.sheets():
+                    for row_idx in range(sheet.nrows):
+                        for col_idx in range(sheet.ncols):
+                            cell = sheet.cell(row_idx, col_idx)
+                            if cell.value is None or cell.value == '':
+                                continue
+
+                            cell_value = str(cell.value).lower()
+
+                            if "수술방법:" not in cell_value:
+                                continue
+
+                            cell_key = f"{sheet.name}_{row_idx}_{col_idx}_{cell_value}"
+                            if cell_key in found_cells:
+                                continue
+                            found_cells.add(cell_key)
+
+                            if any(kw in cell_value for kw in self.config['reservation']['verion_keywords']):
+                                counts['verion'] += 1
+                            elif any(kw in cell_value for kw in self.config['reservation']['lensx_keywords']):
+                                counts['lensx'] += 1
+                            elif any(kw in cell_value for kw in self.config['reservation']['ex500_keywords']):
+                                counts['ex500'] += 1
+
+                return counts
+
+            # .xlsx 파일은 openpyxl로 읽기
             wb = load_workbook(file_path, data_only=True)
 
             for sheet in wb.worksheets:
