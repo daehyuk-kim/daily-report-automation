@@ -1,0 +1,133 @@
+{
+  "template_file": "D:\\결산\\일일결산_템플릿.xlsx",
+  "output_pdf": "D:\\결산\\PDF\\일일결산_{date}.pdf",
+  "target_sheet": "복구됨_Sheet2",
+
+  "validation": {
+    "chart_number_min": 1,
+    "chart_number_max": 210000,
+    "allow_leading_zero": false,
+    "file_extensions": [".pdf", ".jpg", ".jpeg", ".png", ".bmp"]
+  },
+
+  "equipment": {
+    "SP": {
+      "name": "내피",
+      "path": "C:\\sp",
+      "pattern": "\\s(\\d+)_[^_]+_\\d+$",
+      "scan_type": "file",
+      "date_filter": "2019-02-01",
+      "cell": {"row": 15, "col": 3},
+      "use_creation_time": true,
+      "comment": "단일 폴더, 파일명에 날짜 포함 (_YYYYMMDD.)"
+    },
+    "TOPO": {
+      "name": "Tomey",
+      "path": "\\\\topo\\Topo",
+      "pattern": "\\s(\\d+)-",
+      "scan_type": "file",
+      "date_filter": "2019-07-01",
+      "cell": {"row": 16, "col": 3},
+      "folder_structure": "YYYY\\MM\\TOPO MM.DD",
+      "comment": "2025\\01\\TOPO 01.18 형식"
+    },
+    "ORB": {
+      "name": "ORB",
+      "path": "\\\\orb\\orb",
+      "pattern": "[a-zA-Z,\\s]+\\s(\\d+)\\s",
+      "scan_type": "file",
+      "date_filter": "2019-07-01",
+      "cell": {"row": 14, "col": 3},
+      "folder_structure": "YYYY\\YYYY.MM\\ORB MM.DD",
+      "comment": "2025\\2025.01\\ORB 01.18 형식"
+    },
+    "OCT": {
+      "name": "OCT",
+      "path": "\\\\192.168.0.221\\pdf",
+      "pattern": "__(\\d+)_",
+      "scan_type": "both",
+      "date_filter": "2019-07-01",
+      "cell": {"row": 12, "col": 3},
+      "folder_structure": "YYYY\\MM\\DD",
+      "comment": "2025\\01\\18 형식, 파일+폴더 모두 스캔"
+    },
+    "HFA": {
+      "name": "시야",
+      "path": "\\\\geomsa-main2\\hfa",
+      "pattern": "_(\\d+)\\.",
+      "scan_type": "file",
+      "date_filter": "2017-06-01",
+      "cell": {"row": 11, "col": 3},
+      "use_creation_time": true,
+      "comment": "단일 폴더, 생성일 확인 필요"
+    },
+    "OQAS": {
+      "name": "백내장",
+      "path": "\\\\oqas\\oqass",
+      "pattern": "\\s(\\d+)\\s",
+      "scan_type": "file",
+      "date_filter": null,
+      "cell": {"row": 8, "col": 3},
+      "folder_structure": "YYYY\\MM\\DD.MM",
+      "comment": "2025\\01\\18.01 형식"
+    },
+    "IOL700": {
+      "name": "Verion",
+      "path": "D:\\BACKUP\\IOL700",
+      "pattern": "^(\\d+)_",
+      "scan_type": "file",
+      "date_filter": null,
+      "cell": {"row": 19, "col": 3},
+      "use_creation_time": true,
+      "comment": "백업 폴더에서 확인, 생성일 체크"
+    }
+  },
+
+  "special_items": {
+    "녹내장": {
+      "type": "intersection",
+      "sources": ["HFA", "OCT"],
+      "cell": {"row": 9, "col": 3}
+    },
+    "라식": {
+      "type": "complex",
+      "sources": ["ORB", "TOPO"],
+      "scr_folder": "\\\\geomsa-main2\\hfa\\SCR",
+      "cell": {"row": 10, "col": 3}
+    },
+    "안저": {
+      "folders": [
+        "\\\\AFC-210-PC\\Fundus2",
+        "D:\\BACKUP\\FUNDUS\\2017.7~"
+      ],
+      "pattern": "\\s(\\d+)\\s",
+      "cell": {"row": 13, "col": 3},
+      "use_creation_time": true
+    }
+  },
+
+  "manual_input": {
+    "FAG": {"row": 18, "col": 3},
+    "안경검사": {"row": 17, "col": 3}
+  },
+
+  "staff_cell": {"row": 6, "col": 2},
+  "date_cell": {"row": 4, "col": 1},
+
+  "staff_list": [
+    "김창범", "김수지", "김대혁", "김민지",
+    "박현진", "고은서", "김현호", "임량현",
+    "유예나", "김태호"
+  ],
+
+  "reservation": {
+    "verion_keywords": ["toric"],
+    "lensx_keywords": ["lens x", "lensx", "vivity"],
+    "ex500_keywords": ["라식", "라섹", "lasik", "lasek", "올레이저"],
+    "cells": {
+      "verion": {"row": 19, "col": 3},
+      "lensx": {"row": 23, "col": 3},
+      "ex500": {"row": 22, "col": 3}
+    }
+  }
+}
