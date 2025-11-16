@@ -22,12 +22,16 @@ def load_config(config_path="config_real.json"):
         return None
 
 
-def collect_files_from_directory(path, max_files=1000):
-    """디렉토리에서 파일명 수집 (깊이 탐색)"""
+def collect_files_from_directory(path, max_files=1000, min_year=2019):
+    """디렉토리에서 파일명 수집 (깊이 탐색, 2019년 이후 파일만)"""
     files = []
+    skipped_old = 0
 
     if not os.path.exists(path):
-        return files, "경로 접근 불가"
+        return files, "경로 접근 불가", skipped_old
+
+    # 2019년 1월 1일 타임스탬프
+    min_timestamp = datetime(min_year, 1, 1).timestamp()
 
     try:
         count = 0
@@ -35,6 +39,20 @@ def collect_files_from_directory(path, max_files=1000):
             for filename in filenames:
                 # 파일의 전체 경로와 파일명 둘 다 저장
                 full_path = os.path.join(root, filename)
+
+                # 2019년 이후 파일만 수집 (생성일 또는 수정일 기준)
+                try:
+                    file_stat = os.stat(full_path)
+                    # 생성일과 수정일 중 더 최근 것 사용
+                    file_time = max(file_stat.st_ctime, file_stat.st_mtime)
+
+                    if file_time < min_timestamp:
+                        skipped_old += 1
+                        continue
+                except:
+                    # stat 실패 시 일단 포함
+                    pass
+
                 # 상대 경로 계산
                 rel_path = os.path.relpath(full_path, path)
                 files.append({
@@ -44,16 +62,16 @@ def collect_files_from_directory(path, max_files=1000):
                 })
                 count += 1
                 if count >= max_files:
-                    return files, "OK"
+                    return files, "OK", skipped_old
 
             # 진행 상황 표시 (매 100개마다)
             if count > 0 and count % 100 == 0:
-                print(f"      ... {count}개 수집 중")
+                print(f"      ... {count}개 수집 중 (2019 이전 {skipped_old}개 스킵)")
 
-        return files, "OK"
+        return files, "OK", skipped_old
 
     except Exception as e:
-        return files, str(e)
+        return files, str(e), skipped_old
 
 
 def main():
@@ -89,17 +107,17 @@ def main():
             print(f"\n{name} ({equipment_id})")
             print(f"   경로: {path}")
 
-            files, status = collect_files_from_directory(path, max_files=1000)
+            files, status, skipped = collect_files_from_directory(path, max_files=1000)
 
             f.write(f"\n{'='*80}\n")
             f.write(f"{name} ({equipment_id})\n")
             f.write(f"경로: {path}\n")
             f.write(f"상태: {status}\n")
-            f.write(f"수집된 파일 수: {len(files)}\n")
+            f.write(f"수집된 파일 수: {len(files)} (2019년 이전 {skipped}개 스킵)\n")
             f.write(f"{'='*80}\n\n")
 
             if files:
-                print(f"   수집: {len(files)}개 파일")
+                print(f"   수집: {len(files)}개 파일 (2019 이전 {skipped}개 스킵)")
 
                 # 확장자별 통계
                 ext_count = {}
@@ -140,17 +158,17 @@ def main():
                 print(f"\n안저 경로 {idx}")
                 print(f"   경로: {folder}")
 
-                files, status = collect_files_from_directory(folder, max_files=1000)
+                files, status, skipped = collect_files_from_directory(folder, max_files=1000)
 
                 f.write(f"\n{'='*80}\n")
                 f.write(f"안저 경로 {idx}\n")
                 f.write(f"경로: {folder}\n")
                 f.write(f"상태: {status}\n")
-                f.write(f"수집된 파일 수: {len(files)}\n")
+                f.write(f"수집된 파일 수: {len(files)} (2019년 이전 {skipped}개 스킵)\n")
                 f.write(f"{'='*80}\n\n")
 
                 if files:
-                    print(f"   수집: {len(files)}개 파일")
+                    print(f"   수집: {len(files)}개 파일 (2019 이전 {skipped}개 스킵)")
 
                     # 확장자별 통계
                     ext_count = {}
