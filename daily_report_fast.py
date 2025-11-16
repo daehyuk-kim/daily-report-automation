@@ -150,56 +150,53 @@ class DailyReportSystem:
                     files = os.listdir(today_folder)
                     total_files = len(files)
 
-                    # 최적화: 파일명에서 날짜 패턴 먼저 필터링 (getctime 호출 최소화)
+                    # 확장자 필터링 먼저 (빠른 연산)
+                    valid_extensions = self.config['validation']['file_extensions']
+                    candidate_files = [f for f in files if any(f.lower().endswith(ext) for ext in valid_extensions)]
+
+                    log_callback(f"     📊 전체: {total_files}개 / 유효 확장자: {len(candidate_files)}개")
+
+                    if not candidate_files:
+                        log_callback(f"     ⚠️  유효한 파일 없음")
+                        return chart_numbers
+
+                    # 최적화 1: 파일명에 날짜 있는지 먼저 체크
                     today_str = self.today.strftime('%Y%m%d')
                     today_str_dash = self.today.strftime('%Y-%m-%d')
                     today_str_dot = self.today.strftime('%Y.%m.%d')
+                    date_patterns = [today_str, today_str_dash, today_str_dot]
 
-                    # 파일명 날짜 패턴들
-                    date_patterns = [
-                        today_str,           # 20250118
-                        today_str_dash,      # 2025-01-18
-                        today_str_dot,       # 2025.01.18
-                    ]
+                    filename_matched = 0
+                    need_ctime_check = []
 
-                    candidates = []
-                    filename_filtered = 0
-
-                    log_callback(f"     ⚡ 최적화: 파일명 날짜 패턴 우선 필터링")
-
-                    for file_name in files:
-                        # 확장자 체크
-                        if not any(file_name.lower().endswith(ext) for ext in self.config['validation']['file_extensions']):
-                            continue
-
-                        file_path = os.path.join(today_folder, file_name)
-
-                        # 1단계: 파일명에 오늘 날짜가 있는지 먼저 체크 (빠름)
-                        has_today_in_name = any(dp in file_name for dp in date_patterns)
-
-                        if has_today_in_name:
-                            # 파일명에 오늘 날짜 있음 -> 바로 차트번호 추출
-                            filename_filtered += 1
+                    for file_name in candidate_files:
+                        # 파일명에 오늘 날짜가 있으면 바로 처리
+                        if any(dp in file_name for dp in date_patterns):
+                            filename_matched += 1
                             match = pattern.search(file_name)
                             if match:
                                 chart_num = match.group(1)
                                 if self.is_valid_chart_number(chart_num):
                                     chart_numbers.add(chart_num)
                         elif use_creation_time:
-                            # 파일명에 날짜 없지만 생성일 체크 필요 -> 후보에 추가
-                            candidates.append((file_name, file_path))
+                            need_ctime_check.append(file_name)
 
-                    log_callback(f"     📊 전체: {total_files}개 / 파일명 필터: {filename_filtered}개 / 매칭: {len(chart_numbers)}건")
+                    if filename_matched > 0:
+                        log_callback(f"     ⚡ 파일명 날짜 매칭: {filename_matched}개 → {len(chart_numbers)}건")
 
-                    # 2단계: 파일명에 날짜 없는 파일들만 getctime 확인 (병렬 처리)
-                    if candidates and use_creation_time:
-                        log_callback(f"     🔍 생성일 확인 필요: {len(candidates)}개 (병렬 처리)")
+                    # 최적화 2: 생성일 확인이 필요한 경우 (파일명에 날짜 없음)
+                    if need_ctime_check and use_creation_time:
+                        log_callback(f"     🔍 생성일 확인 필요: {len(need_ctime_check)}개")
+                        log_callback(f"     ⚡ 최적화: 역순 스캔 + 조기 종료 + 병렬 처리")
 
-                        def check_file_date(file_info):
-                            file_name, file_path = file_info
+                        # 역순 정렬 (최신 파일이 보통 끝에 있음)
+                        need_ctime_check.sort(reverse=True)
+
+                        def check_file_date(file_name):
+                            file_path = os.path.join(today_folder, file_name)
                             try:
                                 if not os.path.isfile(file_path):
-                                    return None
+                                    return None, None
                                 ctime = os.path.getctime(file_path)
                                 file_date = date.fromtimestamp(ctime)
                                 if file_date == self.today:
@@ -207,27 +204,51 @@ class DailyReportSystem:
                                     if match:
                                         chart_num = match.group(1)
                                         if self.is_valid_chart_number(chart_num):
-                                            return chart_num
+                                            return chart_num, file_date
+                                return None, file_date
                             except:
                                 pass
-                            return None
+                            return None, None
 
-                        # 병렬 처리로 getctime 호출 (네트워크 I/O 병목 해결)
-                        with ThreadPoolExecutor(max_workers=10) as executor:
-                            futures = {executor.submit(check_file_date, info): info for info in candidates}
-                            checked_count = 0
+                        # 배치 처리 (1000개씩)
+                        batch_size = 1000
+                        total_checked = 0
+                        consecutive_old_files = 0
+                        ctime_matches = 0
 
-                            for future in as_completed(futures):
-                                result = future.result()
-                                if result:
-                                    chart_numbers.add(result)
-                                checked_count += 1
+                        for i in range(0, len(need_ctime_check), batch_size):
+                            batch = need_ctime_check[i:i+batch_size]
 
-                                # 진행 상황 로그 (매 100개마다)
-                                if checked_count % 100 == 0:
-                                    log_callback(f"        ... {checked_count}/{len(candidates)} 확인 중")
+                            # 병렬 처리
+                            with ThreadPoolExecutor(max_workers=20) as executor:
+                                futures = [executor.submit(check_file_date, f) for f in batch]
 
-                        log_callback(f"     ✅ 생성일 확인 완료: 추가 {len(chart_numbers) - filename_filtered}건")
+                                batch_old_count = 0
+                                for future in as_completed(futures):
+                                    chart_num, file_date = future.result()
+                                    if chart_num:
+                                        chart_numbers.add(chart_num)
+                                        ctime_matches += 1
+                                        consecutive_old_files = 0
+                                    elif file_date and file_date < self.today:
+                                        batch_old_count += 1
+
+                                # 이 배치에서 대부분 오래된 파일이면
+                                if batch_old_count > len(batch) * 0.9:
+                                    consecutive_old_files += 1
+
+                            total_checked += len(batch)
+
+                            # 진행 상황 로그
+                            if total_checked % 2000 == 0 or i + batch_size >= len(need_ctime_check):
+                                log_callback(f"        ... {total_checked}/{len(need_ctime_check)} 확인 ({ctime_matches}건 발견)")
+
+                            # 조기 종료: 연속 3배치가 모두 오래된 파일이면 중단
+                            if consecutive_old_files >= 3:
+                                log_callback(f"     ⏹️  조기 종료: 최근 파일 없음 (총 {total_checked}개 확인)")
+                                break
+
+                        log_callback(f"     ✅ 생성일 확인 완료: {ctime_matches}건 추가")
 
                     log_callback(f"     📊 최종 결과: {len(chart_numbers)}건 (중복 제외)")
                 return chart_numbers
