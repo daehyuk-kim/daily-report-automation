@@ -246,41 +246,6 @@ class DailyReportSystem:
             log_callback(f"  ❌ 녹내장 계산 오류: {str(e)}")
             return 0
 
-    def calculate_lasik(self, log_callback) -> int:
-        """라식 계산 ((ORB ∩ TOPO) + SCR 폴더)"""
-        try:
-            orb_charts = self.chart_numbers.get('ORB', set())
-            topo_charts = self.chart_numbers.get('TOPO', set())
-            lasik_charts = orb_charts & topo_charts
-
-            # SCR 폴더 추가
-            scr_path = self.config['special_items']['라식']['scr_folder']
-            if os.path.exists(scr_path):
-                # SCR 폴더는 오늘 폴더 카운트만
-                try:
-                    items = os.listdir(scr_path)
-                    for item in items:
-                        item_path = os.path.join(scr_path, item)
-                        # 오늘 생성된 항목만
-                        ctime = os.path.getctime(item_path)
-                        file_date = date.fromtimestamp(ctime)
-                        if file_date == self.today:
-                            # 차트번호 추출 시도
-                            for pattern_str in [r'\s(\d+)\s', r'_(\d+)\.', r'(\d+)']:
-                                match = re.search(pattern_str, item)
-                                if match:
-                                    chart_num = match.group(1)
-                                    if self.is_valid_chart_number(chart_num):
-                                        lasik_charts.add(chart_num)
-                                        break
-                except:
-                    pass
-
-            return len(lasik_charts)
-        except Exception as e:
-            log_callback(f"  ❌ 라식 계산 오류: {str(e)}")
-            return 0
-
     def calculate_fundus(self, log_callback) -> int:
         """안저 계산 (FUNDERS + OPTOS 폴더)"""
         fundus_charts = set()
@@ -391,7 +356,7 @@ class DailyReportSystem:
         return counts
 
     def write_excel(self, output_path: str, staff_selected: List[str],
-                   manual_fag: int, manual_glasses: int,
+                   manual_fag: int, manual_glasses: int, manual_lasik: int,
                    reservation_counts: Dict[str, int], log_callback) -> bool:
         """엑셀 파일 작성"""
         try:
@@ -424,24 +389,22 @@ class DailyReportSystem:
             glaucoma_cell = self.config['special_items']['녹내장']['cell']
             ws.cell(glaucoma_cell['row'], glaucoma_cell['col']).value = glaucoma_count
 
-            lasik_count = self.calculate_lasik(log_callback)
-            lasik_cell = self.config['special_items']['라식']['cell']
-            ws.cell(lasik_cell['row'], lasik_cell['col']).value = lasik_count
-
             fundus_count = self.calculate_fundus(log_callback)
             fundus_cell = self.config['special_items']['안저']['cell']
             ws.cell(fundus_cell['row'], fundus_cell['col']).value = fundus_count
 
             # 수기 입력 항목
+            lasik_cell = self.config['manual_input']['라식']
+            ws.cell(lasik_cell['row'], lasik_cell['col']).value = manual_lasik
+
             fag_cell = self.config['manual_input']['FAG']
             ws.cell(fag_cell['row'], fag_cell['col']).value = manual_fag
 
             glasses_cell = self.config['manual_input']['안경검사']
             ws.cell(glasses_cell['row'], glasses_cell['col']).value = manual_glasses
 
-            # 예약 파일 결과
-            iol700_count = len(self.chart_numbers.get('IOL700', set()))
-            verion_count = max(iol700_count, reservation_counts.get('verion', 0))
+            # 예약 파일 결과 (Verion은 예약파일에서만 추출)
+            verion_count = reservation_counts.get('verion', 0)
             verion_cell = self.config['reservation']['cells']['verion']
             ws.cell(verion_cell['row'], verion_cell['col']).value = verion_count
 
@@ -580,26 +543,33 @@ class DailyReportGUI:
         manual_label = ttk.Label(left_frame, text="✍ 수기 입력", font=("", 12, "bold"))
         manual_label.grid(row=7, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
 
+        lasik_label = ttk.Label(left_frame, text="라식:")
+        lasik_label.grid(row=8, column=0, sticky=tk.W, padx=(0, 5))
+
+        self.lasik_entry = ttk.Entry(left_frame, width=10)
+        self.lasik_entry.insert(0, "0")
+        self.lasik_entry.grid(row=8, column=1, sticky=tk.W, pady=3)
+
         fag_label = ttk.Label(left_frame, text="FAG:")
-        fag_label.grid(row=8, column=0, sticky=tk.W, padx=(0, 5))
+        fag_label.grid(row=9, column=0, sticky=tk.W, padx=(0, 5))
 
         self.fag_entry = ttk.Entry(left_frame, width=10)
         self.fag_entry.insert(0, "0")
-        self.fag_entry.grid(row=8, column=1, sticky=tk.W, pady=3)
+        self.fag_entry.grid(row=9, column=1, sticky=tk.W, pady=3)
 
         glasses_label = ttk.Label(left_frame, text="안경검사:")
-        glasses_label.grid(row=9, column=0, sticky=tk.W, padx=(0, 5))
+        glasses_label.grid(row=10, column=0, sticky=tk.W, padx=(0, 5))
 
         self.glasses_entry = ttk.Entry(left_frame, width=10)
         self.glasses_entry.insert(0, "0")
-        self.glasses_entry.grid(row=9, column=1, sticky=tk.W, pady=3)
+        self.glasses_entry.grid(row=10, column=1, sticky=tk.W, pady=3)
 
         # 4. 실행 버튼
-        ttk.Separator(left_frame, orient='horizontal').grid(row=10, column=0, columnspan=2,
+        ttk.Separator(left_frame, orient='horizontal').grid(row=11, column=0, columnspan=2,
                                                              sticky=(tk.W, tk.E), pady=15)
 
         self.run_button = ttk.Button(left_frame, text="🚀 결산 실행", command=self.run_report)
-        self.run_button.grid(row=11, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
+        self.run_button.grid(row=12, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
 
         # === 우측 영역 구성 ===
 
@@ -671,13 +641,10 @@ class DailyReportGUI:
             self.log("")
 
             # 2. 특수 항목 계산
-            self.log("[특수 항목 계산]")
+            self.log("[2/4] 특수 항목 계산 중...")
 
             glaucoma_count = self.system.calculate_glaucoma(self.log)
             self.log(f"  ✓ 녹내장 (HFA ∩ OCT): {glaucoma_count}건")
-
-            lasik_count = self.system.calculate_lasik(self.log)
-            self.log(f"  ✓ 라식 (ORB ∩ TOPO): {lasik_count}건")
 
             fundus_count = self.system.calculate_fundus(self.log)
             self.log(f"  ✓ 안저: {fundus_count}건")
@@ -688,7 +655,7 @@ class DailyReportGUI:
             reservation_counts = {'verion': 0, 'lensx': 0, 'ex500': 0}
 
             if self.reservation_files:
-                self.log(f"[2/4] 예약 파일 분석 중... ({len(self.reservation_files)}개 파일)")
+                self.log(f"[3/4] 예약 파일 분석 중... ({len(self.reservation_files)}개 파일)")
 
                 for file_path in self.reservation_files:
                     file_name = os.path.basename(file_path)
@@ -703,16 +670,22 @@ class DailyReportGUI:
                 self.log(f"  ✓ Lensx: {reservation_counts['lensx']}건")
                 self.log(f"  ✓ EX500: {reservation_counts['ex500']}건")
             else:
-                self.log("[2/4] 예약 파일 선택 안 함 (건너뜀)")
+                self.log("[3/4] 예약 파일 선택 안 함 (건너뜀)")
 
             self.log("")
 
             # 4. 엑셀 작성
-            self.log("[3/4] 엑셀 파일 작성 중...")
+            self.log("[4/4] 엑셀 파일 작성 중...")
 
             staff_selected = self.get_selected_staff()
             if not staff_selected:
                 self.log("  ⚠️  경고: 직원이 선택되지 않았습니다.")
+
+            try:
+                manual_lasik = int(self.lasik_entry.get())
+            except ValueError:
+                manual_lasik = 0
+                self.log("  ⚠️  라식 값이 올바르지 않아 0으로 설정합니다.")
 
             try:
                 manual_fag = int(self.fag_entry.get())
@@ -730,7 +703,7 @@ class DailyReportGUI:
             temp_excel = f"일일결산_{today_str}_temp.xlsx"
 
             success = self.system.write_excel(
-                temp_excel, staff_selected, manual_fag, manual_glasses,
+                temp_excel, staff_selected, manual_fag, manual_glasses, manual_lasik,
                 reservation_counts, self.log
             )
 
@@ -744,7 +717,7 @@ class DailyReportGUI:
             self.log("")
 
             # 5. PDF 변환
-            self.log("[4/4] PDF 생성 중...")
+            self.log("[5/5] PDF 생성 중...")
 
             pdf_path = self.system.config['output_pdf'].replace('{date}', today_str)
             pdf_success = self.system.convert_to_pdf(temp_excel, pdf_path, self.log)

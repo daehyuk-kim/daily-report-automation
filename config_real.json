@@ -13,13 +13,13 @@
   "equipment": {
     "SP": {
       "name": "내피",
-      "path": "C:\\sp",
-      "pattern": "\\s(\\d+)_[^_]+_\\d+$",
+      "path": "\\\\192.168.0.120\\sp",
+      "pattern": "\\s(\\d+)_",
       "scan_type": "file",
       "date_filter": "2019-02-01",
       "cell": {"row": 15, "col": 3},
       "use_creation_time": true,
-      "comment": "단일 폴더, 파일명에 날짜 포함 (_YYYYMMDD.)"
+      "comment": "단일 폴더, 생성일 확인"
     },
     "TOPO": {
       "name": "Tomey",
@@ -70,16 +70,6 @@
       "cell": {"row": 8, "col": 3},
       "folder_structure": "YYYY\\MM\\DD.MM",
       "comment": "2025\\01\\18.01 형식"
-    },
-    "IOL700": {
-      "name": "Verion",
-      "path": "D:\\BACKUP\\IOL700",
-      "pattern": "^(\\d+)_",
-      "scan_type": "file",
-      "date_filter": null,
-      "cell": {"row": 19, "col": 3},
-      "use_creation_time": true,
-      "comment": "백업 폴더에서 확인, 생성일 체크"
     }
   },
 
@@ -88,12 +78,6 @@
       "type": "intersection",
       "sources": ["HFA", "OCT"],
       "cell": {"row": 9, "col": 3}
-    },
-    "라식": {
-      "type": "complex",
-      "sources": ["ORB", "TOPO"],
-      "scr_folder": "\\\\geomsa-main2\\hfa\\SCR",
-      "cell": {"row": 10, "col": 3}
     },
     "안저": {
       "folders": [
@@ -107,6 +91,7 @@
   },
 
   "manual_input": {
+    "라식": {"row": 10, "col": 3},
     "FAG": {"row": 18, "col": 3},
     "안경검사": {"row": 17, "col": 3}
   },
