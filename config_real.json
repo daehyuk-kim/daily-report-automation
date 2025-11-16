@@ -82,11 +82,12 @@
     "안저": {
       "folders": [
         "\\\\AFC-210-PC\\Fundus2",
-        "D:\\BACKUP\\FUNDUS\\2017.7~"
+        "\\\\192.168.0.213\\[TODO: 실제 하위폴더명 입력 필요]"
       ],
       "pattern": "\\s(\\d+)\\s",
       "cell": {"row": 13, "col": 3},
-      "use_creation_time": true
+      "use_creation_time": true,
+      "comment": "find_fundus_path.py 실행하여 192.168.0.213 하위 정확한 경로 확인 필요"
     }
   },
 
