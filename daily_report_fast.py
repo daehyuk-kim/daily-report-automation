@@ -37,6 +37,13 @@ try:
 except ImportError:
     HAS_XLRD = False
 
+# 파일 캐시 시스템
+try:
+    from file_cache_manager import get_new_files, update_cache_with_today_files, load_cache
+    HAS_CACHE = True
+except ImportError:
+    HAS_CACHE = False
+
 # Windows에서만 pywin32 임포트
 if sys.platform == 'win32':
     try:
@@ -187,6 +194,24 @@ class DailyReportSystem:
                     # 최적화 2: 생성일 확인이 필요한 경우 (파일명에 날짜 없음)
                     if need_ctime_check and use_creation_time:
                         log_callback(f"     🔍 생성일 확인 필요: {len(need_ctime_check)}개")
+
+                        # 캐시 시스템 사용 (가장 빠름)
+                        if HAS_CACHE:
+                            cache = load_cache(today_folder)
+                            if cache['last_updated']:
+                                log_callback(f"     ⚡ 캐시 사용: 마지막 업데이트 {cache['last_updated'][:10]}")
+                                new_files = get_new_files(today_folder, need_ctime_check)
+                                log_callback(f"     📊 캐시에 없는 새 파일: {len(new_files)}개 (기존 {len(need_ctime_check) - len(new_files)}개 스킵)")
+                                need_ctime_check = new_files
+
+                                if not new_files:
+                                    log_callback(f"     ✅ 새 파일 없음 - 캐시에서 모두 확인됨")
+                                    # 캐시 업데이트
+                                    update_cache_with_today_files(today_folder, candidate_files)
+                                    return chart_numbers
+                            else:
+                                log_callback(f"     💾 캐시 없음 - 첫 실행 (다음부터 빨라짐)")
+
                         log_callback(f"     ⚡ 최적화: 역순 스캔 + 조기 종료 + 병렬 처리")
 
                         # 역순 정렬 (최신 파일이 보통 끝에 있음)
@@ -249,6 +274,13 @@ class DailyReportSystem:
                                 break
 
                         log_callback(f"     ✅ 생성일 확인 완료: {ctime_matches}건 추가")
+
+                        # 캐시 업데이트: 오늘 파일 제외한 모든 파일 저장
+                        if HAS_CACHE:
+                            # 오늘 생성된 파일을 제외한 나머지를 캐시에 추가
+                            old_files = [f for f in candidate_files if f not in chart_numbers]
+                            update_cache_with_today_files(today_folder, old_files)
+                            log_callback(f"     💾 캐시 업데이트 완료")
 
                     log_callback(f"     📊 최종 결과: {len(chart_numbers)}건 (중복 제외)")
                 return chart_numbers
