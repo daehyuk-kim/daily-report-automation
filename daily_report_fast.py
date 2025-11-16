@@ -12,6 +12,7 @@ import re
 import threading
 from datetime import datetime, date
 from typing import Set, Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import tkinter as tk
 from tkinter import ttk, filedialog, scrolledtext, messagebox
 
@@ -144,52 +145,91 @@ class DailyReportSystem:
                 log_callback(f"     📂 스캔 경로: {today_folder}")
                 log_callback(f"     🔍 날짜 확인: {'생성일' if use_creation_time else '파일명'}")
 
-                # 단일 폴더만 스캔 (os.listdir 사용)
+                # 단일 폴더만 스캔 (os.listdir 사용) - 최적화 버전
                 if scan_type == 'file':
                     files = os.listdir(today_folder)
                     total_files = len(files)
-                    scanned_files = 0
+
+                    # 최적화: 파일명에서 날짜 패턴 먼저 필터링 (getctime 호출 최소화)
+                    today_str = self.today.strftime('%Y%m%d')
+                    today_str_dash = self.today.strftime('%Y-%m-%d')
+                    today_str_dot = self.today.strftime('%Y.%m.%d')
+
+                    # 파일명 날짜 패턴들
+                    date_patterns = [
+                        today_str,           # 20250118
+                        today_str_dash,      # 2025-01-18
+                        today_str_dot,       # 2025.01.18
+                    ]
+
+                    candidates = []
+                    filename_filtered = 0
+
+                    log_callback(f"     ⚡ 최적화: 파일명 날짜 패턴 우선 필터링")
 
                     for file_name in files:
-                        file_path = os.path.join(today_folder, file_name)
-                        if not os.path.isfile(file_path):
-                            continue
-
                         # 확장자 체크
                         if not any(file_name.lower().endswith(ext) for ext in self.config['validation']['file_extensions']):
                             continue
 
-                        scanned_files += 1
+                        file_path = os.path.join(today_folder, file_name)
 
-                        # 날짜 필터링
-                        if use_creation_time:
-                            # 파일 생성일로 필터링 (HFA, IOL700 등)
+                        # 1단계: 파일명에 오늘 날짜가 있는지 먼저 체크 (빠름)
+                        has_today_in_name = any(dp in file_name for dp in date_patterns)
+
+                        if has_today_in_name:
+                            # 파일명에 오늘 날짜 있음 -> 바로 차트번호 추출
+                            filename_filtered += 1
+                            match = pattern.search(file_name)
+                            if match:
+                                chart_num = match.group(1)
+                                if self.is_valid_chart_number(chart_num):
+                                    chart_numbers.add(chart_num)
+                        elif use_creation_time:
+                            # 파일명에 날짜 없지만 생성일 체크 필요 -> 후보에 추가
+                            candidates.append((file_name, file_path))
+
+                    log_callback(f"     📊 전체: {total_files}개 / 파일명 필터: {filename_filtered}개 / 매칭: {len(chart_numbers)}건")
+
+                    # 2단계: 파일명에 날짜 없는 파일들만 getctime 확인 (병렬 처리)
+                    if candidates and use_creation_time:
+                        log_callback(f"     🔍 생성일 확인 필요: {len(candidates)}개 (병렬 처리)")
+
+                        def check_file_date(file_info):
+                            file_name, file_path = file_info
                             try:
+                                if not os.path.isfile(file_path):
+                                    return None
                                 ctime = os.path.getctime(file_path)
                                 file_date = date.fromtimestamp(ctime)
-                                if file_date != self.today:
-                                    continue
+                                if file_date == self.today:
+                                    match = pattern.search(file_name)
+                                    if match:
+                                        chart_num = match.group(1)
+                                        if self.is_valid_chart_number(chart_num):
+                                            return chart_num
                             except:
-                                continue
-                        else:
-                            # 파일명에서 날짜 확인 (SP: _yyyymmdd. 형식)
-                            date_match = re.search(r'_(\d{8})\.', file_name)
-                            if date_match:
-                                file_date_str = date_match.group(1)
-                                if file_date_str != self.today.strftime('%Y%m%d'):
-                                    continue
-                            # 날짜 패턴이 없으면 건너뜀
-                            else:
-                                continue
+                                pass
+                            return None
 
-                        # 차트번호 추출
-                        match = pattern.search(file_name)
-                        if match:
-                            chart_num = match.group(1)
-                            if self.is_valid_chart_number(chart_num):
-                                chart_numbers.add(chart_num)
+                        # 병렬 처리로 getctime 호출 (네트워크 I/O 병목 해결)
+                        with ThreadPoolExecutor(max_workers=10) as executor:
+                            futures = {executor.submit(check_file_date, info): info for info in candidates}
+                            checked_count = 0
 
-                    log_callback(f"     📊 전체: {total_files}개 / 스캔: {scanned_files}개 / 매칭: {len(chart_numbers)}건")
+                            for future in as_completed(futures):
+                                result = future.result()
+                                if result:
+                                    chart_numbers.add(result)
+                                checked_count += 1
+
+                                # 진행 상황 로그 (매 100개마다)
+                                if checked_count % 100 == 0:
+                                    log_callback(f"        ... {checked_count}/{len(candidates)} 확인 중")
+
+                        log_callback(f"     ✅ 생성일 확인 완료: 추가 {len(chart_numbers) - filename_filtered}건")
+
+                    log_callback(f"     📊 최종 결과: {len(chart_numbers)}건 (중복 제외)")
                 return chart_numbers
 
             # 오늘 폴더와 하위 폴더만 스캔 (os.walk 사용)
@@ -247,32 +287,79 @@ class DailyReportSystem:
             return 0
 
     def calculate_fundus(self, log_callback) -> int:
-        """안저 계산 (FUNDERS + OPTOS 폴더)"""
+        """안저 계산 (FUNDERS + OPTOS 폴더) - 최적화 버전"""
         fundus_charts = set()
         pattern = re.compile(self.config['special_items']['안저']['pattern'])
 
+        # 오늘 날짜 패턴
+        today_str = self.today.strftime('%Y%m%d')
+        today_str_dash = self.today.strftime('%Y-%m-%d')
+        today_str_dot = self.today.strftime('%Y.%m.%d')
+        date_patterns = [today_str, today_str_dash, today_str_dot]
+
         try:
             for folder_str in self.config['special_items']['안저']['folders']:
-                if not os.path.exists(folder_str):
-                    log_callback(f"  ⚠️  경로 없음: {folder_str}")
+                if '[TODO' in folder_str or not os.path.exists(folder_str):
+                    log_callback(f"  ⚠️  경로 없음 또는 미설정: {folder_str}")
                     continue
 
-                # 오늘 생성된 항목만
+                log_callback(f"  📂 스캔: {folder_str}")
+
+                # 오늘 생성된 항목만 - 최적화 버전
                 try:
                     items = os.listdir(folder_str)
-                    for item in items:
-                        item_path = os.path.join(folder_str, item)
-                        ctime = os.path.getctime(item_path)
-                        file_date = date.fromtimestamp(ctime)
+                    total_items = len(items)
 
-                        if file_date == self.today:
+                    # 1단계: 파일명 날짜 패턴 우선 필터링
+                    candidates = []
+                    filename_matched = 0
+
+                    for item in items:
+                        # 파일명에 오늘 날짜가 있는지 먼저 체크
+                        has_today_in_name = any(dp in item for dp in date_patterns)
+
+                        if has_today_in_name:
+                            filename_matched += 1
                             match = pattern.search(item)
                             if match:
                                 chart_num = match.group(1)
                                 if self.is_valid_chart_number(chart_num):
                                     fundus_charts.add(chart_num)
-                except:
-                    pass
+                        else:
+                            # 생성일 확인 필요
+                            candidates.append((item, os.path.join(folder_str, item)))
+
+                    log_callback(f"     전체: {total_items}개 / 파일명 매칭: {filename_matched}개")
+
+                    # 2단계: 나머지는 병렬로 getctime 확인
+                    if candidates:
+                        log_callback(f"     🔍 생성일 확인: {len(candidates)}개")
+
+                        def check_item_date(item_info):
+                            item_name, item_path = item_info
+                            try:
+                                ctime = os.path.getctime(item_path)
+                                file_date = date.fromtimestamp(ctime)
+                                if file_date == self.today:
+                                    match = pattern.search(item_name)
+                                    if match:
+                                        chart_num = match.group(1)
+                                        if self.is_valid_chart_number(chart_num):
+                                            return chart_num
+                            except:
+                                pass
+                            return None
+
+                        # 병렬 처리
+                        with ThreadPoolExecutor(max_workers=10) as executor:
+                            futures = [executor.submit(check_item_date, info) for info in candidates]
+                            for future in as_completed(futures):
+                                result = future.result()
+                                if result:
+                                    fundus_charts.add(result)
+
+                except Exception as e:
+                    log_callback(f"  ⚠️  폴더 스캔 오류: {e}")
 
         except Exception as e:
             log_callback(f"  ❌ 안저 계산 오류: {str(e)}")
