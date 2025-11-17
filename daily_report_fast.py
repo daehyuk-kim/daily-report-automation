@@ -10,7 +10,7 @@ import sys
 import json
 import re
 import threading
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Set, Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import tkinter as tk
@@ -678,9 +678,32 @@ class DailyReportGUI:
 
         # === 좌측 영역 구성 ===
 
+        # 0. 결산 날짜 선택
+        date_label = ttk.Label(left_frame, text="📅 결산 날짜", font=("", 12, "bold"))
+        date_label.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+
+        date_frame = ttk.Frame(left_frame)
+        date_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
+
+        # 날짜 입력 (YYYY-MM-DD)
+        self.date_entry = ttk.Entry(date_frame, width=12)
+        self.date_entry.insert(0, date.today().strftime('%Y-%m-%d'))
+        self.date_entry.grid(row=0, column=0, padx=(0, 5))
+
+        today_btn = ttk.Button(date_frame, text="오늘", width=6,
+                               command=lambda: self.set_date(date.today()))
+        today_btn.grid(row=0, column=1, padx=2)
+
+        yesterday_btn = ttk.Button(date_frame, text="어제", width=6,
+                                   command=lambda: self.set_date(date.today() - timedelta(days=1)))
+        yesterday_btn.grid(row=0, column=2, padx=2)
+
+        ttk.Separator(left_frame, orient='horizontal').grid(row=2, column=0, columnspan=2,
+                                                             sticky=(tk.W, tk.E), pady=5)
+
         # 1. 근무 인원 선택
         staff_label = ttk.Label(left_frame, text="📋 근무 인원", font=("", 12, "bold"))
-        staff_label.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        staff_label.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
 
         staff_canvas = tk.Canvas(left_frame, height=200)
         staff_scrollbar = ttk.Scrollbar(left_frame, orient="vertical", command=staff_canvas.yview)
@@ -694,8 +717,8 @@ class DailyReportGUI:
         staff_canvas.create_window((0, 0), window=staff_scrollable, anchor="nw")
         staff_canvas.configure(yscrollcommand=staff_scrollbar.set)
 
-        staff_canvas.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
-        staff_scrollbar.grid(row=1, column=1, sticky=(tk.N, tk.S), pady=(0, 10))
+        staff_canvas.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        staff_scrollbar.grid(row=4, column=1, sticky=(tk.N, tk.S), pady=(0, 10))
 
         # 직원 체크박스 생성
         self.staff_vars = {}
@@ -706,59 +729,59 @@ class DailyReportGUI:
             cb.grid(row=i, column=0, sticky=tk.W, padx=5, pady=2)
 
         # 2. 예약 파일 선택
-        ttk.Separator(left_frame, orient='horizontal').grid(row=2, column=0, columnspan=2,
+        ttk.Separator(left_frame, orient='horizontal').grid(row=5, column=0, columnspan=2,
                                                              sticky=(tk.W, tk.E), pady=10)
 
         reservation_label = ttk.Label(left_frame, text="📁 예약 파일", font=("", 12, "bold"))
-        reservation_label.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        reservation_label.grid(row=6, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
 
         self.file_button = ttk.Button(left_frame, text="파일 선택...", command=self.select_files)
-        self.file_button.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 5))
+        self.file_button.grid(row=7, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 5))
 
         self.file_label = ttk.Label(left_frame, text="선택된 파일: 없음", foreground="gray")
-        self.file_label.grid(row=5, column=0, columnspan=2, sticky=tk.W)
+        self.file_label.grid(row=8, column=0, columnspan=2, sticky=tk.W)
 
         # 3. 수기 입력
-        ttk.Separator(left_frame, orient='horizontal').grid(row=6, column=0, columnspan=2,
+        ttk.Separator(left_frame, orient='horizontal').grid(row=9, column=0, columnspan=2,
                                                              sticky=(tk.W, tk.E), pady=10)
 
         manual_label = ttk.Label(left_frame, text="✍ 수기 입력", font=("", 12, "bold"))
-        manual_label.grid(row=7, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
+        manual_label.grid(row=10, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
 
         lasik_label = ttk.Label(left_frame, text="라식:")
-        lasik_label.grid(row=8, column=0, sticky=tk.W, padx=(0, 5))
+        lasik_label.grid(row=11, column=0, sticky=tk.W, padx=(0, 5))
 
         self.lasik_entry = ttk.Entry(left_frame, width=10)
         self.lasik_entry.insert(0, "0")
-        self.lasik_entry.grid(row=8, column=1, sticky=tk.W, pady=3)
+        self.lasik_entry.grid(row=11, column=1, sticky=tk.W, pady=3)
 
         fag_label = ttk.Label(left_frame, text="FAG:")
-        fag_label.grid(row=9, column=0, sticky=tk.W, padx=(0, 5))
+        fag_label.grid(row=12, column=0, sticky=tk.W, padx=(0, 5))
 
         self.fag_entry = ttk.Entry(left_frame, width=10)
         self.fag_entry.insert(0, "0")
-        self.fag_entry.grid(row=9, column=1, sticky=tk.W, pady=3)
+        self.fag_entry.grid(row=12, column=1, sticky=tk.W, pady=3)
 
         glasses_label = ttk.Label(left_frame, text="안경검사:")
-        glasses_label.grid(row=10, column=0, sticky=tk.W, padx=(0, 5))
+        glasses_label.grid(row=13, column=0, sticky=tk.W, padx=(0, 5))
 
         self.glasses_entry = ttk.Entry(left_frame, width=10)
         self.glasses_entry.insert(0, "0")
-        self.glasses_entry.grid(row=10, column=1, sticky=tk.W, pady=3)
+        self.glasses_entry.grid(row=13, column=1, sticky=tk.W, pady=3)
 
         octs_label = ttk.Label(left_frame, text="OCTS:")
-        octs_label.grid(row=11, column=0, sticky=tk.W, padx=(0, 5))
+        octs_label.grid(row=14, column=0, sticky=tk.W, padx=(0, 5))
 
         self.octs_entry = ttk.Entry(left_frame, width=10)
         self.octs_entry.insert(0, "0")
-        self.octs_entry.grid(row=11, column=1, sticky=tk.W, pady=3)
+        self.octs_entry.grid(row=14, column=1, sticky=tk.W, pady=3)
 
         # 4. 실행 버튼
-        ttk.Separator(left_frame, orient='horizontal').grid(row=12, column=0, columnspan=2,
+        ttk.Separator(left_frame, orient='horizontal').grid(row=15, column=0, columnspan=2,
                                                              sticky=(tk.W, tk.E), pady=15)
 
         self.run_button = ttk.Button(left_frame, text="🚀 결산 실행", command=self.run_report)
-        self.run_button.grid(row=13, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
+        self.run_button.grid(row=16, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
 
         # === 우측 영역 구성 ===
 
@@ -768,6 +791,11 @@ class DailyReportGUI:
         self.log_text = scrolledtext.ScrolledText(right_frame, width=50, height=30,
                                                    state='disabled', wrap=tk.WORD)
         self.log_text.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+    def set_date(self, target_date: date):
+        """날짜 설정"""
+        self.date_entry.delete(0, tk.END)
+        self.date_entry.insert(0, target_date.strftime('%Y-%m-%d'))
 
     def log(self, message: str):
         """로그 메시지 출력"""
@@ -811,8 +839,20 @@ class DailyReportGUI:
     def process_report(self):
         """결산 처리 메인 로직"""
         try:
+            # 날짜 파싱
+            date_str = self.date_entry.get()
+            try:
+                target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                self.system.today = target_date
+            except ValueError:
+                self.log("❌ 날짜 형식 오류! YYYY-MM-DD 형식으로 입력하세요.")
+                self.run_button.config(state='normal')
+                self.file_button.config(state='normal')
+                return
+
             self.log("=" * 54)
             self.log(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 결산 시작 (최적화 버전)")
+            self.log(f"결산 날짜: {target_date.strftime('%Y-%m-%d')}")
             self.log("=" * 54)
             self.log("")
 
