@@ -1,6 +1,6 @@
 {
-  "template_file": "D:\\결산\\일일결산_템플릿.xlsx",
-  "output_pdf": "D:\\결산\\PDF\\일일결산_{date}.pdf",
+  "template_file": "F:\\결산\\일일결산_템플릿.xlsx",
+  "output_pdf": "F:\\결산\\PDF\\일일결산_{date}.pdf",
   "target_sheet": "복구됨_Sheet2",
 
   "validation": {
@@ -15,7 +15,7 @@
       "name": "내피",
       "path": "\\\\192.168.0.120\\sp",
       "pattern": "(\\d+)_[LR]_",
-      "scan_type": "date_folder",
+      "scan_type": "file",
       "cell": {"row": 15, "col": 3},
       "folder_structure": "YYYY\\MM\\MM.DD",
       "comment": "날짜별 폴더. 예: 권영숙 206338_L_Center.jpg"
@@ -24,7 +24,7 @@
       "name": "Tomey",
       "path": "\\\\topo\\Topo",
       "pattern": "\\s(\\d+)-\\d+",
-      "scan_type": "date_folder",
+      "scan_type": "file",
       "cell": {"row": 16, "col": 3},
       "folder_structure": "YYYY\\MM\\TOPO MM.DD",
       "comment": "날짜별 폴더. 예: 구민선 165774-16.bmp"
@@ -33,7 +33,7 @@
       "name": "ORB",
       "path": "\\\\orb\\orb",
       "pattern": "\\s(\\d+)\\s+o[ds]-",
-      "scan_type": "date_folder",
+      "scan_type": "file",
       "cell": {"row": 14, "col": 3},
       "folder_structure": "YYYY\\YYYY.MM\\ORB MM.DD",
       "comment": "날짜별 폴더. 예: kim, seok hwan 115889 od-18.bmp"
@@ -42,7 +42,7 @@
       "name": "OCT",
       "path": "\\\\192.168.0.221\\pdf",
       "pattern": "\\s(\\d+)-\\d+$",
-      "scan_type": "date_folder",
+      "scan_type": "both",
       "cell": {"row": 12, "col": 3},
       "folder_structure": "YYYY\\MM\\oct MM.DD",
       "comment": "날짜별 폴더 (폴더명). 예: gu, min seon 165774-18"
@@ -51,7 +51,7 @@
       "name": "시야",
       "path": "\\\\geomsa-main2\\hfa",
       "pattern": "^(\\d+)_",
-      "scan_type": "date_folder",
+      "scan_type": "both",
       "cell": {"row": 11, "col": 3},
       "folder_structure": "YYYY\\MM\\MM.DD",
       "comment": "날짜별 폴더 (폴더명). 예: 10643_JOO_DONG MIN_19320821"
@@ -60,7 +60,7 @@
       "name": "백내장",
       "path": "\\\\oqas\\oqass",
       "pattern": "\\s(\\d+)\\s+o[ds]-",
-      "scan_type": "date_folder",
+      "scan_type": "file",
       "cell": {"row": 8, "col": 3},
       "folder_structure": "YYYY\\MM\\MM.DD",
       "comment": "날짜별 폴더. 예: im, heon chang 206343 od-18.jpeg"
