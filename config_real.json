@@ -14,62 +14,56 @@
     "SP": {
       "name": "내피",
       "path": "\\\\192.168.0.120\\sp",
-      "pattern": "\\s(\\d+)_",
-      "scan_type": "file",
-      "date_filter": "2019-02-01",
+      "pattern": "(\\d+)_[LR]_",
+      "scan_type": "top_level",
       "cell": {"row": 15, "col": 3},
       "use_creation_time": true,
-      "comment": "단일 폴더, 생성일 확인"
+      "comment": "최상위 폴더, 오늘 생성 파일만. 예: 김대혁 134348_L_Center.jpg"
     },
     "TOPO": {
       "name": "Tomey",
       "path": "\\\\topo\\Topo",
-      "pattern": "\\s(\\d+)-",
-      "scan_type": "file",
-      "date_filter": "2019-07-01",
+      "pattern": "\\s(\\d+)-\\d+$",
+      "scan_type": "date_folder",
       "cell": {"row": 16, "col": 3},
-      "folder_structure": "YYYY\\MM\\TOPO MM.DD",
-      "comment": "2025\\01\\TOPO 01.18 형식"
+      "folder_structure": "YYYY\\YYYY.MM\\TOPO MM.DD",
+      "comment": "날짜별 폴더. 예: 김대혁 134348-18 (폴더명)"
     },
     "ORB": {
       "name": "ORB",
       "path": "\\\\orb\\orb",
-      "pattern": "[a-zA-Z,\\s]+\\s(\\d+)\\s",
-      "scan_type": "file",
-      "date_filter": "2019-07-01",
+      "pattern": "\\s(\\d+)\\s+o[ds]-",
+      "scan_type": "date_folder",
       "cell": {"row": 14, "col": 3},
       "folder_structure": "YYYY\\YYYY.MM\\ORB MM.DD",
-      "comment": "2025\\2025.01\\ORB 01.18 형식"
+      "comment": "날짜별 폴더. 예: kim, dae hyeok 134348 od-18"
     },
     "OCT": {
       "name": "OCT",
       "path": "\\\\192.168.0.221\\pdf",
-      "pattern": "__(\\d+)_",
-      "scan_type": "both",
-      "date_filter": "2019-07-01",
+      "pattern": "__(\\d+)_\\d{8}_",
+      "scan_type": "date_folder",
       "cell": {"row": 12, "col": 3},
-      "folder_structure": "YYYY\\MM\\DD",
-      "comment": "2025\\01\\18 형식, 파일+폴더 모두 스캔"
+      "folder_structure": "YYYY\\MM\\oct MM.DD",
+      "comment": "날짜별 폴더. 예: an_hyeong ju__16638_19370818_..."
     },
     "HFA": {
       "name": "시야",
       "path": "\\\\geomsa-main2\\hfa",
-      "pattern": "_(\\d+)\\.",
-      "scan_type": "file",
-      "date_filter": "2017-06-01",
+      "pattern": "_SFA_(\\d+)\\.pdf",
+      "scan_type": "top_level",
       "cell": {"row": 11, "col": 3},
       "use_creation_time": true,
-      "comment": "단일 폴더, 생성일 확인 필요"
+      "comment": "최상위 폴더, 오늘 생성 파일만. 예: PAR_..._SFA_118541.Pdf"
     },
     "OQAS": {
       "name": "백내장",
       "path": "\\\\oqas\\oqass",
-      "pattern": "\\s(\\d+)\\s",
-      "scan_type": "file",
-      "date_filter": null,
+      "pattern": "\\s(\\d+)\\s+o[ds]-",
+      "scan_type": "date_folder",
       "cell": {"row": 8, "col": 3},
       "folder_structure": "YYYY\\MM\\DD.MM",
-      "comment": "2025\\01\\18.01 형식"
+      "comment": "날짜별 폴더. 예: kim,dae hyeok 134348 os-18"
     }
   },
 
@@ -82,12 +76,12 @@
     "안저": {
       "folders": [
         "\\\\AFC-210-PC\\Fundus2",
-        "\\\\192.168.0.213\\[TODO: 실제 하위폴더명 입력 필요]"
+        "\\\\192.168.0.213\\images\\Secondary"
       ],
-      "pattern": "\\s(\\d+)\\s",
+      "pattern": "_(\\d+)_\\d{3}\\.jpg",
       "cell": {"row": 13, "col": 3},
       "use_creation_time": true,
-      "comment": "find_fundus_path.py 실행하여 192.168.0.213 하위 정확한 경로 확인 필요"
+      "comment": "두 폴더 모두 최상위, 오늘 생성 파일만. 예: 구정순  _148022_000.jpg"
     }
   },
 
