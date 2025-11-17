@@ -13,59 +13,57 @@
   "equipment": {
     "SP": {
       "name": "내피",
-      "path": "D:\\BACKUP\\SP",
-      "pattern": "\\s(\\d+)_[^_]+_\\d+$",
-      "scan_type": "file",
-      "date_filter": "2019-02-01",
-      "cell": {"row": 15, "col": 3}
+      "path": "\\\\192.168.0.120\\sp",
+      "pattern": "(\\d+)_[LR]_",
+      "scan_type": "top_level",
+      "cell": {"row": 15, "col": 3},
+      "use_creation_time": true,
+      "comment": "최상위 폴더, 오늘 생성 파일만. 예: 김대혁 134348_L_Center.jpg"
     },
     "TOPO": {
       "name": "Tomey",
-      "path": "D:\\BACKUP\\TOPO",
-      "pattern": "\\s(\\d+)-",
-      "scan_type": "file",
-      "date_filter": "2019-07-01",
-      "cell": {"row": 16, "col": 3}
+      "path": "\\\\topo\\Topo",
+      "pattern": "\\s(\\d+)-\\d+$",
+      "scan_type": "date_folder",
+      "cell": {"row": 16, "col": 3},
+      "folder_structure": "YYYY\\YYYY.MM\\TOPO MM.DD",
+      "comment": "날짜별 폴더. 예: 김대혁 134348-18 (폴더명)"
     },
     "ORB": {
       "name": "ORB",
-      "path": "D:\\BACKUP\\ORB",
-      "pattern": "[a-zA-Z,\\s]+\\s(\\d+)\\s",
-      "scan_type": "file",
-      "date_filter": "2019-07-01",
-      "cell": {"row": 14, "col": 3}
+      "path": "\\\\orb\\orb",
+      "pattern": "\\s(\\d+)\\s+o[ds]-",
+      "scan_type": "date_folder",
+      "cell": {"row": 14, "col": 3},
+      "folder_structure": "YYYY\\YYYY.MM\\ORB MM.DD",
+      "comment": "날짜별 폴더. 예: kim, dae hyeok 134348 od-18"
     },
     "OCT": {
       "name": "OCT",
-      "path": "D:\\BACKUP\\OCT",
-      "pattern": "__(\\d+)_",
-      "scan_type": "both",
-      "date_filter": "2019-07-01",
-      "cell": {"row": 12, "col": 3}
+      "path": "\\\\192.168.0.221\\pdf",
+      "pattern": "__(\\d+)_\\d{8}_",
+      "scan_type": "date_folder",
+      "cell": {"row": 12, "col": 3},
+      "folder_structure": "YYYY\\MM\\oct MM.DD",
+      "comment": "날짜별 폴더. 예: an_hyeong ju__16638_19370818_..."
     },
     "HFA": {
       "name": "시야",
-      "path": "D:\\BACKUP\\HFA",
-      "pattern": "_(\\d+)\\.",
-      "scan_type": "file",
-      "date_filter": "2017-06-01",
-      "cell": {"row": 11, "col": 3}
+      "path": "\\\\geomsa-main2\\hfa",
+      "pattern": "_SFA_(\\d+)\\.pdf",
+      "scan_type": "top_level",
+      "cell": {"row": 11, "col": 3},
+      "use_creation_time": true,
+      "comment": "최상위 폴더, 오늘 생성 파일만. 예: PAR_..._SFA_118541.Pdf"
     },
     "OQAS": {
       "name": "백내장",
-      "path": "D:\\BACKUP\\OQAS",
-      "pattern": "\\s(\\d+)\\s",
-      "scan_type": "file",
-      "date_filter": null,
-      "cell": {"row": 8, "col": 3}
-    },
-    "IOL700": {
-      "name": "Verion",
-      "path": "D:\\BACKUP\\IOL700",
-      "pattern": "^(\\d+)_",
-      "scan_type": "file",
-      "date_filter": null,
-      "cell": {"row": 19, "col": 3}
+      "path": "\\\\oqas\\oqass",
+      "pattern": "\\s(\\d+)\\s+o[ds]-",
+      "scan_type": "date_folder",
+      "cell": {"row": 8, "col": 3},
+      "folder_structure": "YYYY\\MM\\DD.MM",
+      "comment": "날짜별 폴더. 예: kim,dae hyeok 134348 os-18"
     }
   },
 
@@ -75,25 +73,32 @@
       "sources": ["HFA", "OCT"],
       "cell": {"row": 9, "col": 3}
     },
-    "라식": {
-      "type": "complex",
-      "sources": ["ORB", "TOPO"],
-      "scr_folder": "D:\\BACKUP\\HFA\\SCR",
-      "cell": {"row": 10, "col": 3}
-    },
     "안저": {
       "folders": [
-        "\\\\192.168.0.213\\Images\\FUNDERS",
-        "\\\\192.168.0.213\\Images\\Secondary"
+        "\\\\AFC-210-PC\\Fundus2",
+        "\\\\192.168.0.213\\images\\Secondary"
       ],
-      "pattern": "\\s(\\d+)\\s",
-      "cell": {"row": 13, "col": 3}
+      "pattern": "_(\\d+)_\\d{3}\\.jpg",
+      "cell": {"row": 13, "col": 3},
+      "use_creation_time": true,
+      "comment": "두 폴더 모두 최상위, 오늘 생성 파일만. 예: 구정순  _148022_000.jpg"
     }
   },
 
   "manual_input": {
+    "라식": {"row": 10, "col": 3},
     "FAG": {"row": 18, "col": 3},
-    "안경검사": {"row": 17, "col": 3}
+    "안경검사": {"row": 17, "col": 3},
+    "OCTS": {"row": null, "col": null, "add_to": "OCT", "comment": "OCT 자동 집계 + OCTS 수기입력 = 최종 OCT"}
+  },
+
+  "combined_items": {
+    "OCT_TOTAL": {
+      "auto_source": "OCT",
+      "manual_source": "OCTS",
+      "target_cell": {"row": 12, "col": 3},
+      "comment": "OCT 자동 스캔 + OCTS 수기 입력 합산"
+    }
   },
 
   "staff_cell": {"row": 6, "col": 2},

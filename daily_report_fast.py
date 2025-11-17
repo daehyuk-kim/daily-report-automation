@@ -508,7 +508,7 @@ class DailyReportSystem:
 
     def write_excel(self, output_path: str, staff_selected: List[str],
                    manual_fag: int, manual_glasses: int, manual_lasik: int,
-                   reservation_counts: Dict[str, int], log_callback) -> bool:
+                   manual_octs: int, reservation_counts: Dict[str, int], log_callback) -> bool:
         """엑셀 파일 작성"""
         try:
             template_file = self.config['template_file']
@@ -533,7 +533,14 @@ class DailyReportSystem:
             for equipment_id, chart_set in self.chart_numbers.items():
                 if equipment_id in self.config['equipment']:
                     cell_info = self.config['equipment'][equipment_id]['cell']
-                    ws.cell(cell_info['row'], cell_info['col']).value = len(chart_set)
+                    # OCT는 OCTS 수기입력과 합산
+                    if equipment_id == 'OCT':
+                        oct_auto = len(chart_set)
+                        oct_total = oct_auto + manual_octs
+                        ws.cell(cell_info['row'], cell_info['col']).value = oct_total
+                        log_callback(f"  ✓ OCT 합산: 자동({oct_auto}) + OCTS({manual_octs}) = {oct_total}")
+                    else:
+                        ws.cell(cell_info['row'], cell_info['col']).value = len(chart_set)
 
             # 특수 항목 기입
             glaucoma_count = self.calculate_glaucoma(log_callback)
@@ -715,12 +722,19 @@ class DailyReportGUI:
         self.glasses_entry.insert(0, "0")
         self.glasses_entry.grid(row=10, column=1, sticky=tk.W, pady=3)
 
+        octs_label = ttk.Label(left_frame, text="OCTS:")
+        octs_label.grid(row=11, column=0, sticky=tk.W, padx=(0, 5))
+
+        self.octs_entry = ttk.Entry(left_frame, width=10)
+        self.octs_entry.insert(0, "0")
+        self.octs_entry.grid(row=11, column=1, sticky=tk.W, pady=3)
+
         # 4. 실행 버튼
-        ttk.Separator(left_frame, orient='horizontal').grid(row=11, column=0, columnspan=2,
+        ttk.Separator(left_frame, orient='horizontal').grid(row=12, column=0, columnspan=2,
                                                              sticky=(tk.W, tk.E), pady=15)
 
         self.run_button = ttk.Button(left_frame, text="🚀 결산 실행", command=self.run_report)
-        self.run_button.grid(row=12, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
+        self.run_button.grid(row=13, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
 
         # === 우측 영역 구성 ===
 
@@ -850,12 +864,18 @@ class DailyReportGUI:
                 manual_glasses = 0
                 self.log("  ⚠️  안경검사 값이 올바르지 않아 0으로 설정합니다.")
 
+            try:
+                manual_octs = int(self.octs_entry.get())
+            except ValueError:
+                manual_octs = 0
+                self.log("  ⚠️  OCTS 값이 올바르지 않아 0으로 설정합니다.")
+
             today_str = date.today().strftime('%Y%m%d')
             temp_excel = f"일일결산_{today_str}_temp.xlsx"
 
             success = self.system.write_excel(
                 temp_excel, staff_selected, manual_fag, manual_glasses, manual_lasik,
-                reservation_counts, self.log
+                manual_octs, reservation_counts, self.log
             )
 
             if not success:
