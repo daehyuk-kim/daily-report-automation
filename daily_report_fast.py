@@ -96,25 +96,32 @@ class DailyReportSystem:
             return False
 
     def get_today_folder_path(self, base_path: str, equipment_id: str) -> Optional[str]:
-        """오늘 날짜 폴더 경로 생성 (장비별 폴더 구조에 맞게)"""
+        """오늘 날짜 폴더 경로 생성 (config의 folder_structure 사용)"""
         today = self.today
 
-        # 장비별 폴더 구조
-        # TOPO: 2025\01\TOPO 01.18
-        # ORB: 2025\2025.01\ORB 01.18
-        # OCT: 2025\01\18
-
-        if equipment_id == 'TOPO':
-            folder = today.strftime("%Y\\%m\\TOPO %m.%d")
-        elif equipment_id == 'ORB':
-            folder = today.strftime("%Y\\%Y.%m\\ORB %m.%d")
-        elif equipment_id == 'OCT':
-            folder = today.strftime("%Y\\%m\\%d")
-        elif equipment_id == 'OQAS':
-            folder = today.strftime("%Y\\%m\\%d.%m")
-        else:
-            # SP, HFA, IOL700 등은 단일 폴더 구조
+        # config에서 folder_structure 가져오기
+        if equipment_id not in self.config['equipment']:
             return base_path
+
+        equipment = self.config['equipment'][equipment_id]
+        if 'folder_structure' not in equipment:
+            return base_path
+
+        # folder_structure 형식을 실제 경로로 변환
+        # YYYY\MM\MM.DD -> 2025\11\11.17
+        # YYYY\MM\TOPO MM.DD -> 2025\11\TOPO 11.17
+        # YYYY\YYYY.MM\ORB MM.DD -> 2025\2025.11\ORB 11.17
+        # YYYY\MM\oct MM.DD -> 2025\11\oct 11.17
+
+        folder_structure = equipment['folder_structure']
+
+        # 날짜 변환 (순서 중요: 긴 패턴부터 변환)
+        folder = folder_structure
+        folder = folder.replace('YYYY.MM', today.strftime('%Y.%m'))
+        folder = folder.replace('YYYY', today.strftime('%Y'))
+        folder = folder.replace('MM.DD', today.strftime('%m.%d'))
+        folder = folder.replace('MM', today.strftime('%m'))
+        folder = folder.replace('DD', today.strftime('%d'))
 
         full_path = os.path.join(base_path, folder)
 
@@ -351,9 +358,8 @@ class DailyReportSystem:
             return 0
 
     def calculate_fundus(self, log_callback) -> int:
-        """안저 계산 (FUNDERS + OPTOS 폴더) - 최적화 버전"""
+        """안저 계산 (Fundus + Secondary 폴더) - 최적화 버전"""
         fundus_charts = set()
-        pattern = re.compile(self.config['special_items']['안저']['pattern'])
 
         # 오늘 날짜 패턴
         today_str = self.today.strftime('%Y%m%d')
@@ -362,68 +368,86 @@ class DailyReportSystem:
         date_patterns = [today_str, today_str_dash, today_str_dot]
 
         try:
-            for folder_str in self.config['special_items']['안저']['folders']:
-                if '[TODO' in folder_str or not os.path.exists(folder_str):
-                    log_callback(f"  ⚠️  경로 없음 또는 미설정: {folder_str}")
-                    continue
+            fundus_config = self.config['special_items']['안저']['folders']
 
-                log_callback(f"  📂 스캔: {folder_str}")
+            # 1. Fundus 폴더 처리 (날짜별 폴더 구조)
+            if 'fundus' in fundus_config:
+                fundus_info = fundus_config['fundus']
+                base_path = fundus_info['path']
+                pattern = re.compile(fundus_info['pattern'])
 
-                # 오늘 생성된 항목만 - 최적화 버전
-                try:
-                    items = os.listdir(folder_str)
-                    total_items = len(items)
+                log_callback(f"  📂 Fundus 스캔: {base_path}")
 
-                    # 1단계: 파일명 날짜 패턴 우선 필터링
-                    candidates = []
-                    filename_matched = 0
+                if os.path.exists(base_path):
+                    # 오늘 날짜 폴더 경로 생성
+                    folder_structure = fundus_info.get('folder_structure', '')
+                    if folder_structure:
+                        folder = folder_structure
+                        folder = folder.replace('YYYY.MM', self.today.strftime('%Y.%m'))
+                        folder = folder.replace('YYYY', self.today.strftime('%Y'))
+                        folder = folder.replace('MM.DD', self.today.strftime('%m.%d'))
+                        folder = folder.replace('MM', self.today.strftime('%m'))
+                        folder = folder.replace('DD', self.today.strftime('%d'))
+                        today_folder = os.path.join(base_path, folder)
+                    else:
+                        today_folder = base_path
 
-                    for item in items:
-                        # 파일명에 오늘 날짜가 있는지 먼저 체크
-                        has_today_in_name = any(dp in item for dp in date_patterns)
+                    if os.path.exists(today_folder):
+                        log_callback(f"     📂 오늘 폴더: {today_folder}")
+                        items = os.listdir(today_folder)
+                        log_callback(f"     전체: {len(items)}개")
 
-                        if has_today_in_name:
-                            filename_matched += 1
+                        for item in items:
                             match = pattern.search(item)
                             if match:
                                 chart_num = match.group(1)
                                 if self.is_valid_chart_number(chart_num):
                                     fundus_charts.add(chart_num)
-                        else:
-                            # 생성일 확인 필요
-                            candidates.append((item, os.path.join(folder_str, item)))
 
-                    log_callback(f"     전체: {total_items}개 / 파일명 매칭: {filename_matched}개")
+                        log_callback(f"     ✅ Fundus 매칭: {len(fundus_charts)}건")
+                    else:
+                        log_callback(f"     ⚠️  오늘 폴더 없음: {today_folder}")
+                else:
+                    log_callback(f"  ⚠️  경로 없음: {base_path}")
 
-                    # 2단계: 나머지는 병렬로 getctime 확인
-                    if candidates:
-                        log_callback(f"     🔍 생성일 확인: {len(candidates)}개")
+            # 2. Secondary 폴더 처리 (파일명에 날짜 포함)
+            if 'secondary' in fundus_config:
+                secondary_info = fundus_config['secondary']
+                folder_path = secondary_info['path']
+                pattern = re.compile(secondary_info['pattern'])
 
-                        def check_item_date(item_info):
-                            item_name, item_path = item_info
-                            try:
-                                ctime = os.path.getctime(item_path)
-                                file_date = date.fromtimestamp(ctime)
-                                if file_date == self.today:
-                                    match = pattern.search(item_name)
-                                    if match:
-                                        chart_num = match.group(1)
-                                        if self.is_valid_chart_number(chart_num):
-                                            return chart_num
-                            except:
-                                pass
-                            return None
+                log_callback(f"  📂 Secondary 스캔: {folder_path}")
 
-                        # 병렬 처리
-                        with ThreadPoolExecutor(max_workers=10) as executor:
-                            futures = [executor.submit(check_item_date, info) for info in candidates]
-                            for future in as_completed(futures):
-                                result = future.result()
-                                if result:
-                                    fundus_charts.add(result)
+                if os.path.exists(folder_path):
+                    try:
+                        items = os.listdir(folder_path)
+                        total_items = len(items)
+                        log_callback(f"     전체: {total_items}개")
 
-                except Exception as e:
-                    log_callback(f"  ⚠️  폴더 스캔 오류: {e}")
+                        # 파일명에 오늘 날짜가 포함된 것만 필터링
+                        # 예: 204775-20250919@161455-l4-s.jpg
+                        filename_matched = 0
+                        secondary_charts = set()
+
+                        for item in items:
+                            if today_str in item:  # 20251117 형식
+                                filename_matched += 1
+                                match = pattern.search(item)
+                                if match:
+                                    chart_num = match.group(1)
+                                    if self.is_valid_chart_number(chart_num):
+                                        secondary_charts.add(chart_num)
+
+                        log_callback(f"     오늘 날짜 매칭: {filename_matched}개")
+                        log_callback(f"     ✅ Secondary 매칭: {len(secondary_charts)}건")
+
+                        # 합집합
+                        fundus_charts.update(secondary_charts)
+
+                    except Exception as e:
+                        log_callback(f"  ⚠️  Secondary 스캔 오류: {e}")
+                else:
+                    log_callback(f"  ⚠️  경로 없음: {folder_path}")
 
         except Exception as e:
             log_callback(f"  ❌ 안저 계산 오류: {str(e)}")

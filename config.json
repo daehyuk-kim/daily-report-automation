@@ -15,19 +15,19 @@
       "name": "내피",
       "path": "\\\\192.168.0.120\\sp",
       "pattern": "(\\d+)_[LR]_",
-      "scan_type": "top_level",
+      "scan_type": "date_folder",
       "cell": {"row": 15, "col": 3},
-      "use_creation_time": true,
-      "comment": "최상위 폴더, 오늘 생성 파일만. 예: 김대혁 134348_L_Center.jpg"
+      "folder_structure": "YYYY\\MM\\MM.DD",
+      "comment": "날짜별 폴더. 예: 권영숙 206338_L_Center.jpg"
     },
     "TOPO": {
       "name": "Tomey",
       "path": "\\\\topo\\Topo",
-      "pattern": "\\s(\\d+)-\\d+$",
+      "pattern": "\\s(\\d+)-\\d+",
       "scan_type": "date_folder",
       "cell": {"row": 16, "col": 3},
-      "folder_structure": "YYYY\\YYYY.MM\\TOPO MM.DD",
-      "comment": "날짜별 폴더. 예: 김대혁 134348-18 (폴더명)"
+      "folder_structure": "YYYY\\MM\\TOPO MM.DD",
+      "comment": "날짜별 폴더. 예: 구민선 165774-16.bmp"
     },
     "ORB": {
       "name": "ORB",
@@ -36,25 +36,25 @@
       "scan_type": "date_folder",
       "cell": {"row": 14, "col": 3},
       "folder_structure": "YYYY\\YYYY.MM\\ORB MM.DD",
-      "comment": "날짜별 폴더. 예: kim, dae hyeok 134348 od-18"
+      "comment": "날짜별 폴더. 예: kim, seok hwan 115889 od-18.bmp"
     },
     "OCT": {
       "name": "OCT",
       "path": "\\\\192.168.0.221\\pdf",
-      "pattern": "__(\\d+)_\\d{8}_",
+      "pattern": "\\s(\\d+)-\\d+$",
       "scan_type": "date_folder",
       "cell": {"row": 12, "col": 3},
       "folder_structure": "YYYY\\MM\\oct MM.DD",
-      "comment": "날짜별 폴더. 예: an_hyeong ju__16638_19370818_..."
+      "comment": "날짜별 폴더 (폴더명). 예: gu, min seon 165774-18"
     },
     "HFA": {
       "name": "시야",
       "path": "\\\\geomsa-main2\\hfa",
-      "pattern": "_SFA_(\\d+)\\.pdf",
-      "scan_type": "top_level",
+      "pattern": "^(\\d+)_",
+      "scan_type": "date_folder",
       "cell": {"row": 11, "col": 3},
-      "use_creation_time": true,
-      "comment": "최상위 폴더, 오늘 생성 파일만. 예: PAR_..._SFA_118541.Pdf"
+      "folder_structure": "YYYY\\MM\\MM.DD",
+      "comment": "날짜별 폴더 (폴더명). 예: 10643_JOO_DONG MIN_19320821"
     },
     "OQAS": {
       "name": "백내장",
@@ -62,8 +62,8 @@
       "pattern": "\\s(\\d+)\\s+o[ds]-",
       "scan_type": "date_folder",
       "cell": {"row": 8, "col": 3},
-      "folder_structure": "YYYY\\MM\\DD.MM",
-      "comment": "날짜별 폴더. 예: kim,dae hyeok 134348 os-18"
+      "folder_structure": "YYYY\\MM\\MM.DD",
+      "comment": "날짜별 폴더. 예: im, heon chang 206343 od-18.jpeg"
     }
   },
 
@@ -74,14 +74,21 @@
       "cell": {"row": 9, "col": 3}
     },
     "안저": {
-      "folders": [
-        "\\\\AFC-210-PC\\Fundus2",
-        "\\\\192.168.0.213\\images\\Secondary"
-      ],
-      "pattern": "_(\\d+)_\\d{3}\\.jpg",
-      "cell": {"row": 13, "col": 3},
-      "use_creation_time": true,
-      "comment": "두 폴더 모두 최상위, 오늘 생성 파일만. 예: 구정순  _148022_000.jpg"
+      "folders": {
+        "fundus": {
+          "path": "\\\\AFC-210-PC\\Fundus2",
+          "pattern": "_(\\d+)_\\d{3}\\.",
+          "folder_structure": "YYYY\\MM\\MM.DD",
+          "comment": "예: 구정순 _148022_000.jpg, 구정순 _148022_001.jpg (한 검사당 4개 정도)"
+        },
+        "secondary": {
+          "path": "\\\\192.168.0.213\\images\\Secondary",
+          "pattern": "^(\\d+)-\\d{8}@",
+          "use_creation_time": false,
+          "comment": "예: 204775-20250919@161455-l4-s.jpg (파일명에 날짜 포함)"
+        }
+      },
+      "cell": {"row": 13, "col": 3}
     }
   },
 
