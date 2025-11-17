@@ -23,15 +23,17 @@ def load_config(config_path="config_real.json"):
 
 
 def collect_files_from_directory(path, max_files=1000, min_year=2019):
-    """디렉토리에서 파일명 수집 (깊이 탐색, 2019년 이후 파일만)"""
+    """디렉토리에서 파일명 수집 (깊이 탐색, 선택적 연도 필터)"""
     files = []
     skipped_old = 0
 
     if not os.path.exists(path):
         return files, "경로 접근 불가", skipped_old
 
-    # 2019년 1월 1일 타임스탬프
-    min_timestamp = datetime(min_year, 1, 1).timestamp()
+    # 연도 필터 설정 (None이면 필터 없음)
+    min_timestamp = None
+    if min_year is not None:
+        min_timestamp = datetime(min_year, 1, 1).timestamp()
 
     try:
         count = 0
@@ -40,18 +42,19 @@ def collect_files_from_directory(path, max_files=1000, min_year=2019):
                 # 파일의 전체 경로와 파일명 둘 다 저장
                 full_path = os.path.join(root, filename)
 
-                # 2019년 이후 파일만 수집 (생성일 또는 수정일 기준)
-                try:
-                    file_stat = os.stat(full_path)
-                    # 생성일과 수정일 중 더 최근 것 사용
-                    file_time = max(file_stat.st_ctime, file_stat.st_mtime)
+                # 연도 필터가 있을 때만 적용
+                if min_timestamp is not None:
+                    try:
+                        file_stat = os.stat(full_path)
+                        # 생성일과 수정일 중 더 최근 것 사용
+                        file_time = max(file_stat.st_ctime, file_stat.st_mtime)
 
-                    if file_time < min_timestamp:
-                        skipped_old += 1
-                        continue
-                except:
-                    # stat 실패 시 일단 포함
-                    pass
+                        if file_time < min_timestamp:
+                            skipped_old += 1
+                            continue
+                    except:
+                        # stat 실패 시 일단 포함
+                        pass
 
                 # 상대 경로 계산
                 rel_path = os.path.relpath(full_path, path)
@@ -66,7 +69,10 @@ def collect_files_from_directory(path, max_files=1000, min_year=2019):
 
             # 진행 상황 표시 (매 100개마다)
             if count > 0 and count % 100 == 0:
-                print(f"      ... {count}개 수집 중 (2019 이전 {skipped_old}개 스킵)")
+                if min_timestamp:
+                    print(f"      ... {count}개 수집 중 (2019 이전 {skipped_old}개 스킵)")
+                else:
+                    print(f"      ... {count}개 수집 중")
 
         return files, "OK", skipped_old
 
@@ -100,6 +106,9 @@ def main():
         print("1. 장비 디렉토리 파일 수집")
         print("-" * 80)
 
+        # SP, ORB, TOPO는 2019년 이전 파일도 수집
+        no_filter_equipment = ['sp', 'orb', 'topo']
+
         for equipment_id, equipment_info in config['equipment'].items():
             name = equipment_info['name']
             path = equipment_info['path']
@@ -107,17 +116,23 @@ def main():
             print(f"\n{name} ({equipment_id})")
             print(f"   경로: {path}")
 
-            files, status, skipped = collect_files_from_directory(path, max_files=1000)
+            # SP, ORB, TOPO는 필터 없이, 나머지는 2019년 이후만
+            if equipment_id.lower() in no_filter_equipment:
+                files, status, skipped = collect_files_from_directory(path, max_files=1000, min_year=None)
+                filter_msg = "필터 없음"
+            else:
+                files, status, skipped = collect_files_from_directory(path, max_files=1000, min_year=2019)
+                filter_msg = f"2019년 이전 {skipped}개 스킵"
 
             f.write(f"\n{'='*80}\n")
             f.write(f"{name} ({equipment_id})\n")
             f.write(f"경로: {path}\n")
             f.write(f"상태: {status}\n")
-            f.write(f"수집된 파일 수: {len(files)} (2019년 이전 {skipped}개 스킵)\n")
+            f.write(f"수집된 파일 수: {len(files)} ({filter_msg})\n")
             f.write(f"{'='*80}\n\n")
 
             if files:
-                print(f"   수집: {len(files)}개 파일 (2019 이전 {skipped}개 스킵)")
+                print(f"   수집: {len(files)}개 파일 ({filter_msg})")
 
                 # 확장자별 통계
                 ext_count = {}
