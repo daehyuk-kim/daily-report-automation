@@ -88,7 +88,17 @@
   "manual_input": {
     "라식": {"row": 10, "col": 3},
     "FAG": {"row": 18, "col": 3},
-    "안경검사": {"row": 17, "col": 3}
+    "안경검사": {"row": 17, "col": 3},
+    "OCTS": {"row": null, "col": null, "add_to": "OCT", "comment": "OCT 자동 집계 + OCTS 수기입력 = 최종 OCT"}
+  },
+
+  "combined_items": {
+    "OCT_TOTAL": {
+      "auto_source": "OCT",
+      "manual_source": "OCTS",
+      "target_cell": {"row": 12, "col": 3},
+      "comment": "OCT 자동 스캔 + OCTS 수기 입력 합산"
+    }
   },
 
   "staff_cell": {"row": 6, "col": 2},
