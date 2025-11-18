@@ -162,7 +162,12 @@ class DailyReportSystem:
             today_folder = self.get_today_folder_path(base_path, equipment_id)
 
             if today_folder is None:
-                # 폴더 구조가 없는 경우 (SP, HFA, IOL700 등) 직접 스캔
+                # folder_structure가 정의된 경우: 날짜 폴더가 없음 (휴무일 가능성)
+                if 'folder_structure' in equipment:
+                    log_callback(f"  ⚠️  날짜 폴더 없음 (휴무일일 수 있음)")
+                    return chart_numbers  # 0건 반환
+
+                # folder_structure가 없는 경우: base_path를 직접 스캔
                 today_folder = base_path
                 use_creation_time = equipment.get('use_creation_time', False)
                 log_callback(f"     📂 스캔 경로: {today_folder}")
@@ -438,11 +443,18 @@ class DailyReportSystem:
                                     if self.is_valid_chart_number(chart_num):
                                         secondary_charts.add(chart_num)
 
-                        log_callback(f"     오늘 날짜 매칭: {filename_matched}개")
-                        log_callback(f"     ✅ Secondary 매칭: {len(secondary_charts)}건")
+                        log_callback(f"     오늘 날짜 파일: {filename_matched}개")
+                        log_callback(f"     ✅ Secondary: {len(secondary_charts)}명 (중복 제거)")
 
                         # 합집합
+                        before_merge = len(fundus_charts)
                         fundus_charts.update(secondary_charts)
+                        after_merge = len(fundus_charts)
+
+                        if before_merge > 0:
+                            overlap = before_merge + len(secondary_charts) - after_merge
+                            if overlap > 0:
+                                log_callback(f"     💡 Fundus & Secondary 중복: {overlap}명")
 
                     except Exception as e:
                         log_callback(f"  ⚠️  Secondary 스캔 오류: {e}")
@@ -452,6 +464,7 @@ class DailyReportSystem:
         except Exception as e:
             log_callback(f"  ❌ 안저 계산 오류: {str(e)}")
 
+        log_callback(f"  📊 안저 최종 집계: {len(fundus_charts)}명 (중복 제거 완료)")
         return len(fundus_charts)
 
     def process_reservation_file(self, file_path: str, log_callback) -> Dict[str, int]:
