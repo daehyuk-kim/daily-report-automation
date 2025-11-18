@@ -545,6 +545,7 @@ class DailyReportSystem:
         """예약 파일 처리 (.xlsx, .xls 모두 지원)"""
         counts = {'verion': 0, 'lensx': 0, 'ex500': 0}
         found_cells = set()
+        search_keyword = self.config['reservation'].get('search_keyword', '예약비고:')
 
         try:
             # .xls 파일인 경우 xlrd로 읽기
@@ -567,7 +568,7 @@ class DailyReportSystem:
 
                             cell_value = str(cell.value).lower()
 
-                            if "수술방법:" not in cell_value:
+                            if search_keyword.lower() not in cell_value:
                                 continue
 
                             cell_key = f"{sheet.name}_{row_idx}_{col_idx}_{cell_value}"
@@ -575,12 +576,16 @@ class DailyReportSystem:
                                 continue
                             found_cells.add(cell_key)
 
-                            if any(kw in cell_value for kw in self.config['reservation']['verion_keywords']):
+                            # 각 셀마다 베리온/LensX/EX500 플래그 체크 (중복 방지)
+                            has_verion = any(kw in cell_value for kw in self.config['reservation']['verion_keywords'])
+                            has_lensx = any(kw in cell_value for kw in self.config['reservation']['lensx_keywords'])
+                            has_ex500 = any(kw in cell_value for kw in self.config['reservation']['ex500_keywords'])
+
+                            if has_verion:
                                 counts['verion'] += 1
-                            if any(kw in cell_value for kw in self.config['reservation']['lensx_keywords']):
+                            if has_lensx:
                                 counts['lensx'] += 1
-                                counts['verion'] += 1  # LensX 수술 시 베리온 검사도 포함
-                            if any(kw in cell_value for kw in self.config['reservation']['ex500_keywords']):
+                            if has_ex500:
                                 counts['ex500'] += 1
 
                 return counts
@@ -596,7 +601,7 @@ class DailyReportSystem:
 
                         cell_value = str(cell.value).lower()
 
-                        if "수술방법:" not in cell_value:
+                        if search_keyword.lower() not in cell_value:
                             continue
 
                         cell_key = f"{sheet.title}_{cell.coordinate}_{cell_value}"
@@ -604,12 +609,16 @@ class DailyReportSystem:
                             continue
                         found_cells.add(cell_key)
 
-                        if any(kw in cell_value for kw in self.config['reservation']['verion_keywords']):
+                        # 각 셀마다 베리온/LensX/EX500 플래그 체크 (중복 방지)
+                        has_verion = any(kw in cell_value for kw in self.config['reservation']['verion_keywords'])
+                        has_lensx = any(kw in cell_value for kw in self.config['reservation']['lensx_keywords'])
+                        has_ex500 = any(kw in cell_value for kw in self.config['reservation']['ex500_keywords'])
+
+                        if has_verion:
                             counts['verion'] += 1
-                        if any(kw in cell_value for kw in self.config['reservation']['lensx_keywords']):
+                        if has_lensx:
                             counts['lensx'] += 1
-                            counts['verion'] += 1  # LensX 수술 시 베리온 검사도 포함
-                        if any(kw in cell_value for kw in self.config['reservation']['ex500_keywords']):
+                        if has_ex500:
                             counts['ex500'] += 1
 
             wb.close()
