@@ -729,7 +729,7 @@ class DailyReportGUI:
     def setup_gui(self):
         """GUI 구성 요소 생성"""
         self.root.title("일일결산 자동화 시스템 (최적화)")
-        self.root.geometry("900x700")
+        self.root.geometry("900x850")
         self.root.resizable(True, True)
 
         main_frame = ttk.Frame(self.root, padding="10")
