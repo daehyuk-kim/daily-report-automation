@@ -44,3 +44,15 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Debug and test files
+debug_*.py
+debug_*.txt
+extract_*.py
+find_*.py
+pre_run_*.py
+*_debug.py
+*_test.py
+samples_*.txt
+*결산로그.txt
+ISSUES_AND_FIXES.md
