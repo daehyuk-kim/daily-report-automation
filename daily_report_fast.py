@@ -162,16 +162,12 @@ class DailyReportSystem:
             today_folder = self.get_today_folder_path(base_path, equipment_id)
 
             if today_folder is None:
-                # folder_structure가 정의된 경우: 날짜 폴더가 없음 (휴무일 가능성)
-                if 'folder_structure' in equipment:
-                    log_callback(f"  ⚠️  날짜 폴더 없음 (휴무일일 수 있음)")
-                    return chart_numbers  # 0건 반환
-
-                # folder_structure가 없는 경우: base_path를 직접 스캔
+                # 날짜 폴더가 없는 경우: base_path를 직접 스캔 (실시간 파일)
+                # SP, HFA, Fundus 등은 낮에는 기본 경로에 파일 생성, 저녁에 날짜 폴더로 정리
                 today_folder = base_path
-                use_creation_time = equipment.get('use_creation_time', False)
-                log_callback(f"     📂 스캔 경로: {today_folder}")
-                log_callback(f"     🔍 날짜 확인: {'생성일' if use_creation_time else '파일명'}")
+                use_creation_time = True  # 날짜 폴더 없으면 무조건 생성일 확인
+                log_callback(f"     📂 스캔 경로: {today_folder} (실시간 파일)")
+                log_callback(f"     🔍 생성일 확인 모드")
 
                 # 단일 폴더만 스캔 - os.scandir() 사용 (stat 캐싱으로 더 빠름)
                 if scan_type == 'file':
@@ -311,40 +307,78 @@ class DailyReportSystem:
             # 오늘 폴더와 하위 폴더만 스캔 (os.walk 사용)
             log_callback(f"     📂 스캔 경로: {today_folder}")
 
+            # 날짜 폴더가 없고 base_path를 스캔하는 경우 (실시간 파일/폴더)
+            is_realtime_scan = (today_folder == base_path)
+
             total_files_count = 0
             total_dirs_count = 0
 
-            for root, dirs, files in os.walk(today_folder):
-                total_files_count += len(files)
-                total_dirs_count += len(dirs)
+            # scan_type == 'both'이고 실시간 스캔일 때: 최상위 폴더만 확인 (생성일 체크)
+            if scan_type == 'both' and is_realtime_scan:
+                log_callback(f"     🔍 실시간 폴더 스캔 (생성일 확인)")
 
-                # 파일 스캔
-                if scan_type in ['file', 'both']:
-                    for file_name in files:
-                        # 확장자 체크
-                        if not any(file_name.lower().endswith(ext) for ext in self.config['validation']['file_extensions']):
-                            continue
+                try:
+                    items = os.listdir(today_folder)
+                    for item in items:
+                        item_path = os.path.join(today_folder, item)
 
-                        # 차트번호 추출
-                        match = pattern.search(file_name)
-                        if match:
-                            chart_num = match.group(1)
-                            if self.is_valid_chart_number(chart_num):
-                                chart_numbers.add(chart_num)
+                        if os.path.isdir(item_path):
+                            total_dirs_count += 1
 
-                # 폴더 스캔 (OCT의 경우)
-                if scan_type == 'both':
-                    for dir_name in dirs:
-                        match = pattern.search(dir_name)
-                        if match:
-                            chart_num = match.group(1)
-                            if self.is_valid_chart_number(chart_num):
-                                chart_numbers.add(chart_num)
+                            # 폴더 생성일 확인
+                            try:
+                                dir_ctime = os.path.getctime(item_path)
+                                dir_date = datetime.fromtimestamp(dir_ctime).date()
 
-            if scan_type == 'both':
-                log_callback(f"     📊 파일: {total_files_count}개 / 폴더: {total_dirs_count}개 / 매칭: {len(chart_numbers)}건")
+                                if dir_date == self.today:
+                                    # 패턴 매칭
+                                    match = pattern.search(item)
+                                    if match:
+                                        chart_num = match.group(1)
+                                        if self.is_valid_chart_number(chart_num):
+                                            chart_numbers.add(chart_num)
+                            except:
+                                pass
+
+                    log_callback(f"     📊 폴더: {total_dirs_count}개 / 매칭: {len(chart_numbers)}건")
+                except Exception as e:
+                    log_callback(f"     ❌ 스캔 오류: {e}")
+
             else:
-                log_callback(f"     📊 파일: {total_files_count}개 / 매칭: {len(chart_numbers)}건")
+                # 일반 스캔 (날짜 폴더가 있는 경우)
+                for root, dirs, files in os.walk(today_folder):
+                    total_files_count += len(files)
+                    total_dirs_count += len(dirs)
+
+                    # 파일 스캔
+                    if scan_type in ['file', 'both']:
+                        for file_name in files:
+                            # 확장자 체크
+                            if not any(file_name.lower().endswith(ext) for ext in self.config['validation']['file_extensions']):
+                                continue
+
+                            # 차트번호 추출
+                            match = pattern.search(file_name)
+                            if match:
+                                chart_num = match.group(1)
+                                if self.is_valid_chart_number(chart_num):
+                                    chart_numbers.add(chart_num)
+
+                    # 폴더 스캔 (OCT, HFA 등)
+                    if scan_type == 'both':
+                        for dir_name in dirs:
+                            match = pattern.search(dir_name)
+                            if match:
+                                chart_num = match.group(1)
+                                if self.is_valid_chart_number(chart_num):
+                                    chart_numbers.add(chart_num)
+
+            # 로그 출력 (실시간 스캔은 위에서 이미 출력)
+            if not (scan_type == 'both' and is_realtime_scan):
+                if scan_type == 'both':
+                    log_callback(f"     📊 파일: {total_files_count}개 / 폴더: {total_dirs_count}개 / 매칭: {len(chart_numbers)}건")
+                else:
+                    log_callback(f"     📊 파일: {total_files_count}개 / 매칭: {len(chart_numbers)}건")
 
         except Exception as e:
             log_callback(f"  ❌ 오류: {equipment['name']} - {str(e)}")
@@ -386,6 +420,8 @@ class DailyReportSystem:
                 if os.path.exists(base_path):
                     # 오늘 날짜 폴더 경로 생성
                     folder_structure = fundus_info.get('folder_structure', '')
+                    today_folder = None
+
                     if folder_structure:
                         folder = folder_structure
                         folder = folder.replace('YYYY.MM', self.today.strftime('%Y.%m'))
@@ -394,11 +430,10 @@ class DailyReportSystem:
                         folder = folder.replace('MM', self.today.strftime('%m'))
                         folder = folder.replace('DD', self.today.strftime('%d'))
                         today_folder = os.path.join(base_path, folder)
-                    else:
-                        today_folder = base_path
 
-                    if os.path.exists(today_folder):
-                        log_callback(f"     📂 오늘 폴더: {today_folder}")
+                    # 1) 날짜 폴더가 있으면 우선 스캔 (저녁 정리 후)
+                    if today_folder and os.path.exists(today_folder):
+                        log_callback(f"     📂 날짜 폴더: {today_folder}")
                         items = os.listdir(today_folder)
                         log_callback(f"     전체: {len(items)}개")
 
@@ -409,9 +444,52 @@ class DailyReportSystem:
                                 if self.is_valid_chart_number(chart_num):
                                     fundus_charts.add(chart_num)
 
-                        log_callback(f"     ✅ Fundus 매칭: {len(fundus_charts)}건")
-                    else:
-                        log_callback(f"     ⚠️  오늘 폴더 없음: {today_folder}")
+                        log_callback(f"     ✅ 날짜 폴더 매칭: {len(fundus_charts)}건")
+
+                    # 2) 날짜 폴더가 없거나, 추가로 base_path도 스캔 (낮 동안 실시간 파일)
+                    # 저녁 정리 전에 base_path에 오늘 생성된 파일이 있을 수 있음
+                    if not today_folder or not os.path.exists(today_folder):
+                        log_callback(f"     📂 기본 경로 스캔: {base_path} (실시간 파일)")
+
+                        try:
+                            # 기본 경로에서 오늘 생성된 파일만 필터링
+                            items = os.listdir(base_path)
+                            # 하위 폴더 제외, 파일만
+                            files = [f for f in items if os.path.isfile(os.path.join(base_path, f))]
+                            log_callback(f"     전체 파일: {len(files)}개")
+
+                            base_fundus_charts = set()
+                            valid_extensions = self.config['validation']['file_extensions']
+
+                            for file_name in files:
+                                # 확장자 체크
+                                if not any(file_name.lower().endswith(ext) for ext in valid_extensions):
+                                    continue
+
+                                file_path = os.path.join(base_path, file_name)
+
+                                # 파일 생성일 확인
+                                try:
+                                    file_ctime = os.path.getctime(file_path)
+                                    file_date = datetime.fromtimestamp(file_ctime).date()
+
+                                    if file_date == self.today:
+                                        # 패턴 매칭
+                                        match = pattern.search(file_name)
+                                        if match:
+                                            chart_num = match.group(1)
+                                            if self.is_valid_chart_number(chart_num):
+                                                base_fundus_charts.add(chart_num)
+                                except:
+                                    pass
+
+                            if base_fundus_charts:
+                                log_callback(f"     ✅ 실시간 파일 매칭: {len(base_fundus_charts)}건")
+                                fundus_charts.update(base_fundus_charts)
+                            else:
+                                log_callback(f"     ⚠️  오늘 생성된 파일 없음")
+                        except Exception as e:
+                            log_callback(f"     ❌ 기본 경로 스캔 오류: {e}")
                 else:
                     log_callback(f"  ⚠️  경로 없음: {base_path}")
 
