@@ -160,14 +160,16 @@ class DailyReportSystem:
         try:
             # 오늘 날짜 폴더 경로 찾기
             today_folder = self.get_today_folder_path(base_path, equipment_id)
+            is_realtime_scan = False  # 기본값
 
             if today_folder is None:
                 # 날짜 폴더가 없는 경우: base_path를 직접 스캔
                 # SP, HFA, Fundus 등은 낮에는 최상위 폴더에 직접 저장, 저녁에 날짜 폴더로 이동
                 # 날짜 폴더가 없으면 최상위에 있는 것들이 오늘 것임
                 today_folder = base_path
+                is_realtime_scan = True  # 실시간 스캔 표시
                 use_creation_time = equipment.get('use_creation_time', False)
-                log_callback(f"     📂 스캔 경로: {today_folder} (날짜 폴더 미정리)")
+                log_callback(f"     📂 스캔 경로: {today_folder} (날짜 폴더 미정리 - 최상위 전체 스캔)")
                 if use_creation_time:
                     log_callback(f"     🔍 생성일 확인 모드")
 
@@ -197,113 +199,124 @@ class DailyReportSystem:
                         log_callback(f"     ⚠️  유효한 파일 없음")
                         return chart_numbers
 
-                    # 최적화 1: 파일명/경로에 날짜 있는지 체크 (백업 스크립트 방식)
-                    filename_matched = 0
-                    need_ctime_check = []
-
-                    for entry in candidate_entries:
-                        # 파일명 또는 전체 경로에 오늘 날짜가 있으면 바로 처리
-                        if any(dp in entry.path for dp in today_patterns):
-                            filename_matched += 1
+                    # 최적화 1: 날짜 폴더 미정리 시 모든 파일을 오늘 것으로 간주
+                    if is_realtime_scan:
+                        log_callback(f"     🔍 실시간 스캔 모드: 모든 파일 매칭")
+                        for entry in candidate_entries:
                             match = pattern.search(entry.name)
                             if match:
                                 chart_num = match.group(1)
                                 if self.is_valid_chart_number(chart_num):
                                     chart_numbers.add(chart_num)
-                        elif use_creation_time:
-                            need_ctime_check.append(entry)
+                        log_callback(f"     ✅ 매칭 완료: {len(chart_numbers)}건")
+                    else:
+                        # 날짜 폴더가 있는 경우: 파일명/경로에 날짜 확인
+                        filename_matched = 0
+                        need_ctime_check = []
 
-                    if filename_matched > 0:
-                        log_callback(f"     ⚡ 파일명/경로 날짜 매칭: {filename_matched}개 → {len(chart_numbers)}건")
+                        for entry in candidate_entries:
+                            # 파일명 또는 전체 경로에 오늘 날짜가 있으면 바로 처리
+                            if any(dp in entry.path for dp in today_patterns):
+                                filename_matched += 1
+                                match = pattern.search(entry.name)
+                                if match:
+                                    chart_num = match.group(1)
+                                    if self.is_valid_chart_number(chart_num):
+                                        chart_numbers.add(chart_num)
+                            elif use_creation_time:
+                                need_ctime_check.append(entry)
 
-                    # 최적화 2: 생성일 확인이 필요한 경우 (파일명에 날짜 없음)
-                    if need_ctime_check and use_creation_time:
-                        log_callback(f"     🔍 생성일 확인 필요: {len(need_ctime_check)}개")
+                        if filename_matched > 0:
+                            log_callback(f"     ⚡ 파일명/경로 날짜 매칭: {filename_matched}개 → {len(chart_numbers)}건")
 
-                        # 캐시 시스템 사용 (가장 빠름)
-                        if HAS_CACHE:
-                            cache = load_cache(today_folder)
-                            if cache['last_updated']:
-                                log_callback(f"     ⚡ 캐시 사용: 마지막 업데이트 {cache['last_updated'][:10]}")
-                                entry_names = [e.name for e in need_ctime_check]
-                                new_file_names = get_new_files(today_folder, entry_names)
-                                new_file_set = set(new_file_names)
-                                need_ctime_check = [e for e in need_ctime_check if e.name in new_file_set]
-                                log_callback(f"     📊 캐시에 없는 새 파일: {len(need_ctime_check)}개 (기존 {len(entry_names) - len(need_ctime_check)}개 스킵)")
+                        # 최적화 2: 생성일 확인이 필요한 경우 (파일명에 날짜 없음)
+                        if need_ctime_check and use_creation_time:
+                            log_callback(f"     🔍 생성일 확인 필요: {len(need_ctime_check)}개")
 
-                                if not need_ctime_check:
-                                    log_callback(f"     ✅ 새 파일 없음 - 캐시에서 모두 확인됨")
-                                    # 캐시 업데이트
-                                    update_cache_with_today_files(today_folder, [e.name for e in candidate_entries])
-                                    return chart_numbers
-                            else:
-                                log_callback(f"     💾 캐시 없음 - 첫 실행 (다음부터 빨라짐)")
+                            # 캐시 시스템 사용 (가장 빠름)
+                            if HAS_CACHE:
+                                cache = load_cache(today_folder)
+                                if cache['last_updated']:
+                                    log_callback(f"     ⚡ 캐시 사용: 마지막 업데이트 {cache['last_updated'][:10]}")
+                                    entry_names = [e.name for e in need_ctime_check]
+                                    new_file_names = get_new_files(today_folder, entry_names)
+                                    new_file_set = set(new_file_names)
+                                    need_ctime_check = [e for e in need_ctime_check if e.name in new_file_set]
+                                    log_callback(f"     📊 캐시에 없는 새 파일: {len(need_ctime_check)}개 (기존 {len(entry_names) - len(need_ctime_check)}개 스킵)")
 
-                        log_callback(f"     ⚡ os.scandir() stat 캐싱 사용 (getctime보다 10배 빠름)")
+                                    if not need_ctime_check:
+                                        log_callback(f"     ✅ 새 파일 없음 - 캐시에서 모두 확인됨")
+                                        # 캐시 업데이트
+                                        update_cache_with_today_files(today_folder, [e.name for e in candidate_entries])
+                                        return chart_numbers
+                                else:
+                                    log_callback(f"     💾 캐시 없음 - 첫 실행 (다음부터 빨라짐)")
 
-                        # DirEntry.stat()은 캐싱됨 - 네트워크 호출 최소화
-                        def check_entry_date(entry):
-                            try:
-                                # entry.stat()은 캐싱되어 있어 매우 빠름
-                                stat_info = entry.stat(follow_symlinks=False)
-                                ctime = stat_info.st_ctime
-                                file_date = date.fromtimestamp(ctime)
-                                if file_date == self.today:
-                                    match = pattern.search(entry.name)
-                                    if match:
-                                        chart_num = match.group(1)
-                                        if self.is_valid_chart_number(chart_num):
-                                            return chart_num, file_date
-                                return None, file_date
-                            except:
-                                pass
-                            return None, None
+                            log_callback(f"     ⚡ os.scandir() stat 캐싱 사용 (getctime보다 10배 빠름)")
 
-                        # 배치 처리 (1000개씩) - entry.stat()은 캐싱되어 병렬 불필요
-                        batch_size = 1000
-                        total_checked = 0
-                        consecutive_old_files = 0
-                        ctime_matches = 0
+                            # DirEntry.stat()은 캐싱됨 - 네트워크 호출 최소화
+                            def check_entry_date(entry):
+                                try:
+                                    # entry.stat()은 캐싱되어 있어 매우 빠름
+                                    stat_info = entry.stat(follow_symlinks=False)
+                                    ctime = stat_info.st_ctime
+                                    file_date = date.fromtimestamp(ctime)
+                                    if file_date == self.today:
+                                        match = pattern.search(entry.name)
+                                        if match:
+                                            chart_num = match.group(1)
+                                            if self.is_valid_chart_number(chart_num):
+                                                return chart_num, file_date
+                                    return None, file_date
+                                except:
+                                    pass
+                                return None, None
 
-                        for i in range(0, len(need_ctime_check), batch_size):
-                            batch = need_ctime_check[i:i+batch_size]
+                            # 배치 처리 (1000개씩) - entry.stat()은 캐싱되어 병렬 불필요
+                            batch_size = 1000
+                            total_checked = 0
+                            consecutive_old_files = 0
+                            ctime_matches = 0
 
-                            # 순차 처리 (entry.stat()은 이미 캐싱됨, 병렬보다 오버헤드 적음)
-                            batch_old_count = 0
-                            for entry in batch:
-                                chart_num, file_date = check_entry_date(entry)
-                                if chart_num:
-                                    chart_numbers.add(chart_num)
-                                    ctime_matches += 1
-                                    consecutive_old_files = 0
-                                elif file_date and file_date < self.today:
-                                    batch_old_count += 1
+                            for i in range(0, len(need_ctime_check), batch_size):
+                                batch = need_ctime_check[i:i+batch_size]
 
-                            # 이 배치에서 대부분 오래된 파일이면
-                            if batch_old_count > len(batch) * 0.9:
-                                consecutive_old_files += 1
+                                # 순차 처리 (entry.stat()은 이미 캐싱됨, 병렬보다 오버헤드 적음)
+                                batch_old_count = 0
+                                for entry in batch:
+                                    chart_num, file_date = check_entry_date(entry)
+                                    if chart_num:
+                                        chart_numbers.add(chart_num)
+                                        ctime_matches += 1
+                                        consecutive_old_files = 0
+                                    elif file_date and file_date < self.today:
+                                        batch_old_count += 1
 
-                            total_checked += len(batch)
+                                # 이 배치에서 대부분 오래된 파일이면
+                                if batch_old_count > len(batch) * 0.9:
+                                    consecutive_old_files += 1
 
-                            # 진행 상황 로그
-                            if total_checked % 2000 == 0 or i + batch_size >= len(need_ctime_check):
-                                log_callback(f"        ... {total_checked}/{len(need_ctime_check)} 확인 ({ctime_matches}건 발견)")
+                                total_checked += len(batch)
 
-                            # 조기 종료: 연속 3배치가 모두 오래된 파일이면 중단
-                            if consecutive_old_files >= 3:
-                                log_callback(f"     ⏹️  조기 종료: 최근 파일 없음 (총 {total_checked}개 확인)")
-                                break
+                                # 진행 상황 로그
+                                if total_checked % 2000 == 0 or i + batch_size >= len(need_ctime_check):
+                                    log_callback(f"        ... {total_checked}/{len(need_ctime_check)} 확인 ({ctime_matches}건 발견)")
 
-                        log_callback(f"     ✅ 생성일 확인 완료: {ctime_matches}건 추가")
+                                # 조기 종료: 연속 3배치가 모두 오래된 파일이면 중단
+                                if consecutive_old_files >= 3:
+                                    log_callback(f"     ⏹️  조기 종료: 최근 파일 없음 (총 {total_checked}개 확인)")
+                                    break
 
-                        # 캐시 업데이트: 오늘 파일 제외한 모든 파일 저장
-                        if HAS_CACHE:
-                            # 오늘 생성된 파일을 제외한 나머지를 캐시에 추가
-                            old_files = [e.name for e in candidate_entries if e.name not in chart_numbers]
-                            update_cache_with_today_files(today_folder, old_files)
-                            log_callback(f"     💾 캐시 업데이트 완료")
+                            log_callback(f"     ✅ 생성일 확인 완료: {ctime_matches}건 추가")
 
-                    log_callback(f"     📊 최종 결과: {len(chart_numbers)}건 (중복 제외)")
+                            # 캐시 업데이트: 오늘 파일 제외한 모든 파일 저장
+                            if HAS_CACHE:
+                                # 오늘 생성된 파일을 제외한 나머지를 캐시에 추가
+                                old_files = [e.name for e in candidate_entries if e.name not in chart_numbers]
+                                update_cache_with_today_files(today_folder, old_files)
+                                log_callback(f"     💾 캐시 업데이트 완료")
+
+                        log_callback(f"     📊 최종 결과: {len(chart_numbers)}건 (중복 제외)")
                 return chart_numbers
 
             # 오늘 폴더와 하위 폴더만 스캔 (os.walk 사용)
@@ -564,9 +577,10 @@ class DailyReportSystem:
 
                             if any(kw in cell_value for kw in self.config['reservation']['verion_keywords']):
                                 counts['verion'] += 1
-                            elif any(kw in cell_value for kw in self.config['reservation']['lensx_keywords']):
+                            if any(kw in cell_value for kw in self.config['reservation']['lensx_keywords']):
                                 counts['lensx'] += 1
-                            elif any(kw in cell_value for kw in self.config['reservation']['ex500_keywords']):
+                                counts['verion'] += 1  # LensX 수술 시 베리온 검사도 포함
+                            if any(kw in cell_value for kw in self.config['reservation']['ex500_keywords']):
                                 counts['ex500'] += 1
 
                 return counts
@@ -592,9 +606,10 @@ class DailyReportSystem:
 
                         if any(kw in cell_value for kw in self.config['reservation']['verion_keywords']):
                             counts['verion'] += 1
-                        elif any(kw in cell_value for kw in self.config['reservation']['lensx_keywords']):
+                        if any(kw in cell_value for kw in self.config['reservation']['lensx_keywords']):
                             counts['lensx'] += 1
-                        elif any(kw in cell_value for kw in self.config['reservation']['ex500_keywords']):
+                            counts['verion'] += 1  # LensX 수술 시 베리온 검사도 포함
+                        if any(kw in cell_value for kw in self.config['reservation']['ex500_keywords']):
                             counts['ex500'] += 1
 
             wb.close()
