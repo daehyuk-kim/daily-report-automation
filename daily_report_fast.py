@@ -338,6 +338,9 @@ class DailyReportSystem:
             total_files_count = 0
             total_dirs_count = 0
 
+            # 디버그: scan_type과 is_realtime_scan 값 확인
+            log_callback(f"     🔧 DEBUG: scan_type='{scan_type}', is_realtime_scan={is_realtime_scan}")
+
             # scan_type == 'both'이고 날짜 폴더 없을 때: 최상위 폴더 전체 스캔
             if scan_type == 'both' and is_realtime_scan:
                 log_callback(f"     🔍 최상위 폴더 스캔 (정리 전)")
