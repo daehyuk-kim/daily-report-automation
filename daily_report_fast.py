@@ -95,6 +95,16 @@ class DailyReportSystem:
         except (ValueError, KeyError):
             return False
 
+    def extract_chart_number(self, match) -> Optional[str]:
+        """정규식 매칭에서 차트번호 추출 (단일/이중 그룹 패턴 지원)
+
+        단일 그룹 패턴 (SP, TOPO 등): (\d+)_
+        이중 그룹 패턴 (HFA): _(\d{5,6})$|^(\d{5,6})_
+        """
+        if not match:
+            return None
+        return match.group(1) or (match.group(2) if match.lastindex > 1 else None)
+
     def get_today_folder_path(self, base_path: str, equipment_id: str) -> Optional[str]:
         """오늘 날짜 폴더 경로 생성 (config의 folder_structure 사용)"""
         today = self.today
@@ -205,7 +215,7 @@ class DailyReportSystem:
                         for entry in candidate_entries:
                             match = pattern.search(entry.name)
                             if match:
-                                chart_num = match.group(1)
+                                chart_num = self.extract_chart_number(match)
                                 if self.is_valid_chart_number(chart_num):
                                     chart_numbers.add(chart_num)
                         log_callback(f"     ✅ 매칭 완료: {len(chart_numbers)}건")
@@ -220,7 +230,7 @@ class DailyReportSystem:
                                 filename_matched += 1
                                 match = pattern.search(entry.name)
                                 if match:
-                                    chart_num = match.group(1)
+                                    chart_num = self.extract_chart_number(match)
                                     if self.is_valid_chart_number(chart_num):
                                         chart_numbers.add(chart_num)
                             elif use_creation_time:
@@ -264,7 +274,7 @@ class DailyReportSystem:
                                     if file_date == self.today:
                                         match = pattern.search(entry.name)
                                         if match:
-                                            chart_num = match.group(1)
+                                            chart_num = self.extract_chart_number(match)
                                             if self.is_valid_chart_number(chart_num):
                                                 return chart_num, file_date
                                     return None, file_date
@@ -343,7 +353,7 @@ class DailyReportSystem:
                             # 패턴 매칭 (생성일 확인 없이)
                             match = pattern.search(item)
                             if match:
-                                chart_num = match.group(1)
+                                chart_num = self.extract_chart_number(match)
                                 if self.is_valid_chart_number(chart_num):
                                     chart_numbers.add(chart_num)
 
@@ -367,7 +377,7 @@ class DailyReportSystem:
                             # 차트번호 추출
                             match = pattern.search(file_name)
                             if match:
-                                chart_num = match.group(1)
+                                chart_num = self.extract_chart_number(match)
                                 if self.is_valid_chart_number(chart_num):
                                     chart_numbers.add(chart_num)
 
@@ -376,7 +386,7 @@ class DailyReportSystem:
                         for dir_name in dirs:
                             match = pattern.search(dir_name)
                             if match:
-                                chart_num = match.group(1)
+                                chart_num = self.extract_chart_number(match)
                                 if self.is_valid_chart_number(chart_num):
                                     chart_numbers.add(chart_num)
 
@@ -447,7 +457,7 @@ class DailyReportSystem:
                         for item in items:
                             match = pattern.search(item)
                             if match:
-                                chart_num = match.group(1)
+                                chart_num = self.extract_chart_number(match)
                                 if self.is_valid_chart_number(chart_num):
                                     fundus_charts.add(chart_num)
 
@@ -475,7 +485,7 @@ class DailyReportSystem:
                                 # 패턴 매칭 (생성일 확인 없이)
                                 match = pattern.search(file_name)
                                 if match:
-                                    chart_num = match.group(1)
+                                    chart_num = self.extract_chart_number(match)
                                     if self.is_valid_chart_number(chart_num):
                                         base_fundus_charts.add(chart_num)
 
@@ -513,7 +523,7 @@ class DailyReportSystem:
                                 filename_matched += 1
                                 match = pattern.search(item)
                                 if match:
-                                    chart_num = match.group(1)
+                                    chart_num = self.extract_chart_number(match)
                                     if self.is_valid_chart_number(chart_num):
                                         secondary_charts.add(chart_num)
 

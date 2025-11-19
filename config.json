@@ -50,11 +50,11 @@
     "HFA": {
       "name": "시야",
       "path": "\\\\geomsa-main2\\hfa",
-      "pattern": "^(\\d+)_",
+      "pattern": "_(\\d{5,6})$|^(\\d{5,6})_",
       "scan_type": "both",
       "cell": {"row": 11, "col": 3},
       "folder_structure": "YYYY\\MM\\MM.DD",
-      "comment": "날짜별 폴더 (폴더명). 예: 10643_JOO_DONG MIN_19320821"
+      "comment": "폴더명: 56416_PARK_SU HO_19630605 / 파일명: PAR_20251119_163745_OD_83017128_SFA_56416"
     },
     "OQAS": {
       "name": "백내장",
