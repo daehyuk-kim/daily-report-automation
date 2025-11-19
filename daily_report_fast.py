@@ -748,6 +748,7 @@ class DailyReportGUI:
         self.root = root
         self.system = system
         self.reservation_files = []
+        self.log_file_handle = None  # 로그 파일 핸들
         self.setup_gui()
 
     def setup_gui(self):
@@ -896,12 +897,20 @@ class DailyReportGUI:
         self.date_entry.insert(0, target_date.strftime('%Y-%m-%d'))
 
     def log(self, message: str):
-        """로그 메시지 출력"""
+        """로그 메시지 출력 (화면 + 파일)"""
         self.log_text.configure(state='normal')
         self.log_text.insert(tk.END, message + '\n')
         self.log_text.see(tk.END)
         self.log_text.configure(state='disabled')
         self.root.update()
+
+        # 로그 파일에도 기록
+        if self.log_file_handle:
+            try:
+                self.log_file_handle.write(message + '\n')
+                self.log_file_handle.flush()  # 즉시 디스크에 쓰기
+            except Exception as e:
+                print(f"로그 파일 쓰기 오류: {e}")
 
     def select_files(self):
         """예약 파일 선택"""
@@ -936,6 +945,14 @@ class DailyReportGUI:
 
     def process_report(self):
         """결산 처리 메인 로직"""
+        # 로그 파일 열기
+        log_filename = f"결산로그_{date.today().strftime('%Y-%m-%d')}.txt"
+        try:
+            self.log_file_handle = open(log_filename, 'w', encoding='utf-8')
+        except Exception as e:
+            print(f"로그 파일 생성 오류: {e}")
+            self.log_file_handle = None
+
         try:
             # 날짜 파싱
             date_str = self.date_entry.get()
@@ -951,6 +968,7 @@ class DailyReportGUI:
             self.log("=" * 54)
             self.log(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 결산 시작 (최적화 버전)")
             self.log(f"결산 날짜: {target_date.strftime('%Y-%m-%d')}")
+            self.log(f"로그 파일: {log_filename}")
             self.log("=" * 54)
             self.log("")
 
@@ -1083,6 +1101,14 @@ class DailyReportGUI:
             self.log("=" * 54)
 
         finally:
+            # 로그 파일 닫기
+            if self.log_file_handle:
+                try:
+                    self.log_file_handle.close()
+                    self.log_file_handle = None
+                except Exception as e:
+                    print(f"로그 파일 닫기 오류: {e}")
+
             self.run_button.config(state='normal')
             self.file_button.config(state='normal')
 
