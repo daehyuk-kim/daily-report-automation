@@ -327,7 +327,8 @@ class DailyReportSystem:
                                 log_callback(f"     💾 캐시 업데이트 완료")
 
                         log_callback(f"     📊 최종 결과: {len(chart_numbers)}건 (중복 제외)")
-                return chart_numbers
+                    return chart_numbers
+                # scan_type == 'file'이 아닐 때는 아래 일반 스캔 로직으로 계속 진행
 
             # 오늘 폴더와 하위 폴더만 스캔 (os.walk 사용)
             log_callback(f"     📂 스캔 경로: {today_folder}")
