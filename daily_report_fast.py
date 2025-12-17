@@ -774,7 +774,7 @@ class DailyReportGUI:
     def setup_gui(self):
         """GUI 구성 요소 생성"""
         self.root.title("일일결산 자동화 시스템 (최적화)")
-        self.root.geometry("1200x950")
+        self.root.geometry("1400x800")
         self.root.resizable(True, True)
 
         main_frame = ttk.Frame(self.root, padding="10")
@@ -782,16 +782,24 @@ class DailyReportGUI:
 
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
+
+        # 3칸 레이아웃 설정
+        main_frame.columnconfigure(0, weight=0)  # 왼쪽: 고정 너비
+        main_frame.columnconfigure(1, weight=0)  # 중간: 고정 너비
+        main_frame.columnconfigure(2, weight=1)  # 오른쪽: 가변 너비 (로그)
         main_frame.rowconfigure(0, weight=1)
 
-        # 좌측 입력 영역
+        # 왼쪽 입력 영역 (날짜, 인원, 예약파일, 수기입력)
         left_frame = ttk.Frame(main_frame, padding="5")
         left_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        # 우측 로그 영역
+        # 중간 결과 영역 (스캔 결과)
+        middle_frame = ttk.Frame(main_frame, padding="5")
+        middle_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        # 오른쪽 로그 영역
         right_frame = ttk.Frame(main_frame, padding="5")
-        right_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
+        right_frame.grid(row=0, column=2, sticky=(tk.W, tk.E, tk.N, tk.S))
         right_frame.columnconfigure(0, weight=1)
         right_frame.rowconfigure(1, weight=1)
 
@@ -821,10 +829,10 @@ class DailyReportGUI:
                                                              sticky=(tk.W, tk.E), pady=5)
 
         # 1. 근무 인원 선택
-        staff_label = ttk.Label(left_frame, text="📋 근무 인원", font=("", 12, "bold"))
+        staff_label = ttk.Label(left_frame, text="👥 근무 인원", font=("", 12, "bold"))
         staff_label.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
 
-        staff_canvas = tk.Canvas(left_frame, height=150)
+        staff_canvas = tk.Canvas(left_frame, height=200)
         staff_scrollbar = ttk.Scrollbar(left_frame, orient="vertical", command=staff_canvas.yview)
         staff_scrollable = ttk.Frame(staff_canvas)
 
@@ -902,16 +910,14 @@ class DailyReportGUI:
         self.scan_button = ttk.Button(left_frame, text="🔍 스캔 시작", command=self.run_scan)
         self.scan_button.grid(row=16, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=8)
 
-        # 5. 결과 확인 및 수정 (초기에는 숨김)
-        ttk.Separator(left_frame, orient='horizontal').grid(row=17, column=0, columnspan=2,
-                                                             sticky=(tk.W, tk.E), pady=8)
+        # === 중간 영역 구성 (스캔 결과) ===
 
-        result_label = ttk.Label(left_frame, text="📊 스캔 결과 (수정 가능)", font=("", 12, "bold"))
-        result_label.grid(row=18, column=0, columnspan=2, sticky=tk.W, pady=(0, 8))
+        result_label = ttk.Label(middle_frame, text="📊 스캔 결과 (수정 가능)", font=("", 12, "bold"))
+        result_label.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
 
         # 결과 프레임 (스크롤 가능)
-        result_canvas = tk.Canvas(left_frame, height=250)
-        result_scrollbar = ttk.Scrollbar(left_frame, orient="vertical", command=result_canvas.yview)
+        result_canvas = tk.Canvas(middle_frame, height=600)
+        result_scrollbar = ttk.Scrollbar(middle_frame, orient="vertical", command=result_canvas.yview)
         self.result_frame = ttk.Frame(result_canvas)
 
         self.result_frame.bind(
@@ -922,8 +928,8 @@ class DailyReportGUI:
         result_canvas.create_window((0, 0), window=self.result_frame, anchor="nw")
         result_canvas.configure(yscrollcommand=result_scrollbar.set)
 
-        result_canvas.grid(row=19, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        result_scrollbar.grid(row=19, column=1, sticky=(tk.N, tk.S))
+        result_canvas.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        result_scrollbar.grid(row=1, column=1, sticky=(tk.N, tk.S), pady=(0, 10))
 
         # 결과 항목들 (Entry 위젯) - 초기에는 비활성화
         self.result_entries = {}
@@ -946,24 +952,24 @@ class DailyReportGUI:
 
         for idx, (key, label_text) in enumerate(result_items):
             label = ttk.Label(self.result_frame, text=f"{label_text}:")
-            label.grid(row=idx, column=0, sticky=tk.W, padx=(0, 5), pady=2)
+            label.grid(row=idx, column=0, sticky=tk.W, padx=(0, 10), pady=3)
 
-            entry = ttk.Entry(self.result_frame, width=10, state='disabled')
+            entry = ttk.Entry(self.result_frame, width=12, state='disabled')
             entry.insert(0, "0")
-            entry.grid(row=idx, column=1, sticky=tk.W, pady=2)
+            entry.grid(row=idx, column=1, sticky=tk.W, pady=3)
             self.result_entries[key] = entry
 
-        # 6. PDF 출력 버튼 (초기에는 비활성화)
-        self.output_button = ttk.Button(left_frame, text="✅ 확정 및 PDF 출력",
+        # PDF 출력 버튼 (초기에는 비활성화)
+        self.output_button = ttk.Button(middle_frame, text="✅ 확정 및 PDF 출력",
                                         command=self.run_output, state='disabled')
-        self.output_button.grid(row=20, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=8)
+        self.output_button.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
 
-        # === 우측 영역 구성 ===
+        # === 오른쪽 영역 구성 (실행 로그) ===
 
-        log_label = ttk.Label(right_frame, text="실행 로그", font=("", 12, "bold"))
-        log_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
+        log_label = ttk.Label(right_frame, text="📋 실행 로그", font=("", 12, "bold"))
+        log_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 10))
 
-        self.log_text = scrolledtext.ScrolledText(right_frame, width=60, height=40,
+        self.log_text = scrolledtext.ScrolledText(right_frame, width=70, height=42,
                                                    state='disabled', wrap=tk.WORD)
         self.log_text.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
