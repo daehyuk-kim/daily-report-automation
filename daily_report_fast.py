@@ -774,7 +774,7 @@ class DailyReportGUI:
     def setup_gui(self):
         """GUI 구성 요소 생성"""
         self.root.title("일일결산 자동화 시스템 (최적화)")
-        self.root.geometry("900x850")
+        self.root.geometry("1200x950")
         self.root.resizable(True, True)
 
         main_frame = ttk.Frame(self.root, padding="10")
@@ -824,7 +824,7 @@ class DailyReportGUI:
         staff_label = ttk.Label(left_frame, text="📋 근무 인원", font=("", 12, "bold"))
         staff_label.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
 
-        staff_canvas = tk.Canvas(left_frame, height=200)
+        staff_canvas = tk.Canvas(left_frame, height=150)
         staff_scrollbar = ttk.Scrollbar(left_frame, orient="vertical", command=staff_canvas.yview)
         staff_scrollable = ttk.Frame(staff_canvas)
 
@@ -897,20 +897,20 @@ class DailyReportGUI:
 
         # 4. 스캔 버튼
         ttk.Separator(left_frame, orient='horizontal').grid(row=15, column=0, columnspan=2,
-                                                             sticky=(tk.W, tk.E), pady=15)
+                                                             sticky=(tk.W, tk.E), pady=10)
 
         self.scan_button = ttk.Button(left_frame, text="🔍 스캔 시작", command=self.run_scan)
-        self.scan_button.grid(row=16, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
+        self.scan_button.grid(row=16, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=8)
 
         # 5. 결과 확인 및 수정 (초기에는 숨김)
         ttk.Separator(left_frame, orient='horizontal').grid(row=17, column=0, columnspan=2,
-                                                             sticky=(tk.W, tk.E), pady=10)
+                                                             sticky=(tk.W, tk.E), pady=8)
 
         result_label = ttk.Label(left_frame, text="📊 스캔 결과 (수정 가능)", font=("", 12, "bold"))
-        result_label.grid(row=18, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
+        result_label.grid(row=18, column=0, columnspan=2, sticky=tk.W, pady=(0, 8))
 
         # 결과 프레임 (스크롤 가능)
-        result_canvas = tk.Canvas(left_frame, height=300)
+        result_canvas = tk.Canvas(left_frame, height=250)
         result_scrollbar = ttk.Scrollbar(left_frame, orient="vertical", command=result_canvas.yview)
         self.result_frame = ttk.Frame(result_canvas)
 
@@ -956,14 +956,14 @@ class DailyReportGUI:
         # 6. PDF 출력 버튼 (초기에는 비활성화)
         self.output_button = ttk.Button(left_frame, text="✅ 확정 및 PDF 출력",
                                         command=self.run_output, state='disabled')
-        self.output_button.grid(row=20, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
+        self.output_button.grid(row=20, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=8)
 
         # === 우측 영역 구성 ===
 
         log_label = ttk.Label(right_frame, text="실행 로그", font=("", 12, "bold"))
         log_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
 
-        self.log_text = scrolledtext.ScrolledText(right_frame, width=50, height=30,
+        self.log_text = scrolledtext.ScrolledText(right_frame, width=60, height=40,
                                                    state='disabled', wrap=tk.WORD)
         self.log_text.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
