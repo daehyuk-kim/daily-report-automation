@@ -590,10 +590,11 @@ class DailyReportSystem:
                                 continue
                             found_cells.add(cell_key)
 
-                            # 각 셀마다 베리온/LensX/EX500 플래그 체크 (중복 방지)
-                            has_verion = any(kw in cell_value for kw in self.config['reservation']['verion_keywords'])
-                            has_lensx = any(kw in cell_value for kw in self.config['reservation']['lensx_keywords'])
-                            has_ex500 = any(kw in cell_value for kw in self.config['reservation']['ex500_keywords'])
+                            # 각 셀마다 베리온/LensX/EX500 플래그 체크 (중복 방지, 대소문자 무시)
+                            cell_value_lower = cell_value.lower()
+                            has_verion = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['verion_keywords'])
+                            has_lensx = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['lensx_keywords'])
+                            has_ex500 = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['ex500_keywords'])
 
                             if has_verion:
                                 counts['verion'] += 1
@@ -623,10 +624,11 @@ class DailyReportSystem:
                             continue
                         found_cells.add(cell_key)
 
-                        # 각 셀마다 베리온/LensX/EX500 플래그 체크 (중복 방지)
-                        has_verion = any(kw in cell_value for kw in self.config['reservation']['verion_keywords'])
-                        has_lensx = any(kw in cell_value for kw in self.config['reservation']['lensx_keywords'])
-                        has_ex500 = any(kw in cell_value for kw in self.config['reservation']['ex500_keywords'])
+                        # 각 셀마다 베리온/LensX/EX500 플래그 체크 (중복 방지, 대소문자 무시)
+                        cell_value_lower = cell_value.lower()
+                        has_verion = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['verion_keywords'])
+                        has_lensx = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['lensx_keywords'])
+                        has_ex500 = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['ex500_keywords'])
 
                         if has_verion:
                             counts['verion'] += 1
