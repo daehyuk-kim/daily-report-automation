@@ -594,13 +594,6 @@ class DailyReportSystem:
                             cell_value_lower = cell_value.lower()
                             has_verion = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['verion_keywords'])
                             has_lensx = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['lensx_keywords'])
-
-                            # +lx 패턴 체크 (예: +lx, +LX, + lx, +l.x, +L.X 등)
-                            if self.config['reservation'].get('lensx_plus_pattern', False):
-                                plus_lx_pattern = r'\+\s*[lL]\.?\s*[xX]'
-                                if re.search(plus_lx_pattern, cell_value):
-                                    has_lensx = True
-
                             has_ex500 = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['ex500_keywords'])
 
                             if has_verion:
@@ -635,13 +628,6 @@ class DailyReportSystem:
                         cell_value_lower = cell_value.lower()
                         has_verion = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['verion_keywords'])
                         has_lensx = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['lensx_keywords'])
-
-                        # +lx 패턴 체크 (예: +lx, +LX, + lx, +l.x, +L.X 등)
-                        if self.config['reservation'].get('lensx_plus_pattern', False):
-                            plus_lx_pattern = r'\+\s*[lL]\.?\s*[xX]'
-                            if re.search(plus_lx_pattern, cell_value):
-                                has_lensx = True
-
                         has_ex500 = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['ex500_keywords'])
 
                         if has_verion:
@@ -660,8 +646,7 @@ class DailyReportSystem:
 
     def write_excel(self, output_path: str, staff_selected: List[str],
                    manual_fag: int, manual_glasses: int, manual_lasik: int,
-                   manual_octs: int, reservation_counts: Dict[str, int], log_callback,
-                   glaucoma_count: int = None, fundus_count: int = None) -> bool:
+                   manual_octs: int, reservation_counts: Dict[str, int], log_callback) -> bool:
         """엑셀 파일 작성"""
         try:
             template_file = self.config['template_file']
@@ -695,14 +680,12 @@ class DailyReportSystem:
                     else:
                         ws.cell(cell_info['row'], cell_info['col']).value = len(chart_set)
 
-            # 특수 항목 기입 (전달된 값이 있으면 사용, 없으면 계산)
-            if glaucoma_count is None:
-                glaucoma_count = self.calculate_glaucoma(log_callback)
+            # 특수 항목 기입
+            glaucoma_count = self.calculate_glaucoma(log_callback)
             glaucoma_cell = self.config['special_items']['녹내장']['cell']
             ws.cell(glaucoma_cell['row'], glaucoma_cell['col']).value = glaucoma_count
 
-            if fundus_count is None:
-                fundus_count = self.calculate_fundus(log_callback)
+            fundus_count = self.calculate_fundus(log_callback)
             fundus_cell = self.config['special_items']['안저']['cell']
             ws.cell(fundus_cell['row'], fundus_cell['col']).value = fundus_count
 
@@ -782,54 +765,29 @@ class DailyReportGUI:
         self.system = system
         self.reservation_files = []
         self.log_file_handle = None  # 로그 파일 핸들
-        self.scan_results = {}  # 스캔 결과 저장
         self.setup_gui()
 
     def setup_gui(self):
         """GUI 구성 요소 생성"""
         self.root.title("일일결산 자동화 시스템 (최적화)")
-        self.root.geometry("1400x800")
+        self.root.geometry("900x850")
         self.root.resizable(True, True)
-
-        # 메뉴바 추가
-        menubar = tk.Menu(self.root)
-        self.root.config(menu=menubar)
-
-        # 설정 메뉴
-        settings_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="설정", menu=settings_menu)
-        settings_menu.add_command(label="경로 설정...", command=self.open_settings)
-        settings_menu.add_separator()
-        settings_menu.add_command(label="설정 다시 로드", command=self.reload_config)
-
-        # 도움말 메뉴
-        help_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="도움말", menu=help_menu)
-        help_menu.add_command(label="정보", command=self.show_about)
 
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
-
-        # 3칸 레이아웃 설정
-        main_frame.columnconfigure(0, weight=0)  # 왼쪽: 고정 너비
-        main_frame.columnconfigure(1, weight=0)  # 중간: 고정 너비
-        main_frame.columnconfigure(2, weight=1)  # 오른쪽: 가변 너비 (로그)
+        main_frame.columnconfigure(1, weight=1)
         main_frame.rowconfigure(0, weight=1)
 
-        # 왼쪽 입력 영역 (날짜, 인원, 예약파일, 수기입력)
+        # 좌측 입력 영역
         left_frame = ttk.Frame(main_frame, padding="5")
         left_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        # 중간 결과 영역 (스캔 결과)
-        middle_frame = ttk.Frame(main_frame, padding="5")
-        middle_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
-
-        # 오른쪽 로그 영역
+        # 우측 로그 영역
         right_frame = ttk.Frame(main_frame, padding="5")
-        right_frame.grid(row=0, column=2, sticky=(tk.W, tk.E, tk.N, tk.S))
+        right_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
         right_frame.columnconfigure(0, weight=1)
         right_frame.rowconfigure(1, weight=1)
 
@@ -859,7 +817,7 @@ class DailyReportGUI:
                                                              sticky=(tk.W, tk.E), pady=5)
 
         # 1. 근무 인원 선택
-        staff_label = ttk.Label(left_frame, text="👥 근무 인원", font=("", 12, "bold"))
+        staff_label = ttk.Label(left_frame, text="📋 근무 인원", font=("", 12, "bold"))
         staff_label.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
 
         staff_canvas = tk.Canvas(left_frame, height=200)
@@ -933,73 +891,19 @@ class DailyReportGUI:
         self.octs_entry.insert(0, "0")
         self.octs_entry.grid(row=14, column=1, sticky=tk.W, pady=3)
 
-        # 4. 스캔 버튼
+        # 4. 실행 버튼
         ttk.Separator(left_frame, orient='horizontal').grid(row=15, column=0, columnspan=2,
-                                                             sticky=(tk.W, tk.E), pady=10)
+                                                             sticky=(tk.W, tk.E), pady=15)
 
-        self.scan_button = ttk.Button(left_frame, text="🔍 스캔 시작", command=self.run_scan)
-        self.scan_button.grid(row=16, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=8)
+        self.run_button = ttk.Button(left_frame, text="🚀 결산 실행", command=self.run_report)
+        self.run_button.grid(row=16, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
 
-        # === 중간 영역 구성 (스캔 결과) ===
+        # === 우측 영역 구성 ===
 
-        result_label = ttk.Label(middle_frame, text="📊 스캔 결과 (수정 가능)", font=("", 12, "bold"))
-        result_label.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
+        log_label = ttk.Label(right_frame, text="실행 로그", font=("", 12, "bold"))
+        log_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
 
-        # 결과 프레임 (스크롤 가능)
-        result_canvas = tk.Canvas(middle_frame, height=600)
-        result_scrollbar = ttk.Scrollbar(middle_frame, orient="vertical", command=result_canvas.yview)
-        self.result_frame = ttk.Frame(result_canvas)
-
-        self.result_frame.bind(
-            "<Configure>",
-            lambda e: result_canvas.configure(scrollregion=result_canvas.bbox("all"))
-        )
-
-        result_canvas.create_window((0, 0), window=self.result_frame, anchor="nw")
-        result_canvas.configure(yscrollcommand=result_scrollbar.set)
-
-        result_canvas.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
-        result_scrollbar.grid(row=1, column=1, sticky=(tk.N, tk.S), pady=(0, 10))
-
-        # 결과 항목들 (Entry 위젯) - 초기에는 비활성화
-        self.result_entries = {}
-        result_items = [
-            ('OQAS', '백내장'),
-            ('HFA', '시야'),
-            ('OCT', 'OCT'),
-            ('ORB', 'ORB'),
-            ('SP', '내피'),
-            ('TOPO', 'Tomey'),
-            ('GLAUCOMA', '녹내장'),
-            ('FUNDUS', '안저'),
-            ('LASIK', '라식'),
-            ('GLASSES', '안경검사'),
-            ('FAG', 'FAG'),
-            ('VERION', 'Verion'),
-            ('LENSX', 'LensX'),
-            ('EX500', 'EX500'),
-        ]
-
-        for idx, (key, label_text) in enumerate(result_items):
-            label = ttk.Label(self.result_frame, text=f"{label_text}:")
-            label.grid(row=idx, column=0, sticky=tk.W, padx=(0, 10), pady=3)
-
-            entry = ttk.Entry(self.result_frame, width=12, state='disabled')
-            entry.insert(0, "0")
-            entry.grid(row=idx, column=1, sticky=tk.W, pady=3)
-            self.result_entries[key] = entry
-
-        # PDF 출력 버튼 (초기에는 비활성화)
-        self.output_button = ttk.Button(middle_frame, text="✅ 확정 및 PDF 출력",
-                                        command=self.run_output, state='disabled')
-        self.output_button.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
-
-        # === 오른쪽 영역 구성 (실행 로그) ===
-
-        log_label = ttk.Label(right_frame, text="📋 실행 로그", font=("", 12, "bold"))
-        log_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 10))
-
-        self.log_text = scrolledtext.ScrolledText(right_frame, width=70, height=42,
+        self.log_text = scrolledtext.ScrolledText(right_frame, width=50, height=30,
                                                    state='disabled', wrap=tk.WORD)
         self.log_text.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
@@ -1043,300 +947,8 @@ class DailyReportGUI:
         """선택된 직원 목록 반환"""
         return [name for name, var in self.staff_vars.items() if var.get()]
 
-    def run_scan(self):
-        """1단계: 스캔 실행"""
-        self.scan_button.config(state='disabled')
-        self.file_button.config(state='disabled')
-
-        self.log_text.configure(state='normal')
-        self.log_text.delete(1.0, tk.END)
-        self.log_text.configure(state='disabled')
-
-        thread = threading.Thread(target=self.process_scan, daemon=True)
-        thread.start()
-
-    def run_output(self):
-        """2단계: PDF 출력"""
-        self.output_button.config(state='disabled')
-
-        thread = threading.Thread(target=self.process_output, daemon=True)
-        thread.start()
-
-    def process_scan(self):
-        """1단계: 스캔 처리 - 결과를 화면에 표시"""
-        # 로그 파일 열기
-        log_filename = f"결산로그_{date.today().strftime('%Y-%m-%d')}.txt"
-        try:
-            self.log_file_handle = open(log_filename, 'w', encoding='utf-8')
-        except Exception as e:
-            print(f"로그 파일 생성 오류: {e}")
-            self.log_file_handle = None
-
-        try:
-            # 날짜 파싱
-            date_str = self.date_entry.get()
-            try:
-                target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-                self.system.today = target_date
-            except ValueError:
-                self.log("❌ 날짜 형식 오류! YYYY-MM-DD 형식으로 입력하세요.")
-                self.scan_button.config(state='normal')
-                self.file_button.config(state='normal')
-                return
-
-            self.log("=" * 54)
-            self.log(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 스캔 시작")
-            self.log(f"결산 날짜: {target_date.strftime('%Y-%m-%d')}")
-            self.log(f"로그 파일: {log_filename}")
-            self.log("=" * 54)
-            self.log("")
-
-            # 1. 디렉토리 자동 스캔
-            self.log("[1/3] 디렉토리 자동 스캔 중...")
-            for equipment_id in self.system.config['equipment'].keys():
-                equipment_name = self.system.config['equipment'][equipment_id]['name']
-                self.log(f"  🔍 {equipment_name} 스캔 중...")
-
-                chart_set = self.system.scan_directory_fast(equipment_id, self.log)
-                self.system.chart_numbers[equipment_id] = chart_set
-
-                self.log(f"  ✓ {equipment_name}: {len(chart_set)}건")
-
-            self.log("")
-
-            # 2. 특수 항목 계산
-            self.log("[2/3] 특수 항목 계산 중...")
-
-            glaucoma_count = self.system.calculate_glaucoma(self.log)
-            self.log(f"  ✓ 녹내장 (HFA ∩ OCT): {glaucoma_count}건")
-
-            fundus_count = self.system.calculate_fundus(self.log)
-            self.log(f"  ✓ 안저: {fundus_count}건")
-
-            self.log("")
-
-            # 3. 예약 파일 처리
-            reservation_counts = {'verion': 0, 'lensx': 0, 'ex500': 0}
-
-            if self.reservation_files:
-                self.log(f"[3/3] 예약 파일 분석 중... ({len(self.reservation_files)}개 파일)")
-
-                for file_path in self.reservation_files:
-                    file_name = os.path.basename(file_path)
-                    self.log(f"  📄 {file_name}")
-
-                    file_counts = self.system.process_reservation_file(file_path, self.log)
-
-                    for key in reservation_counts:
-                        reservation_counts[key] += file_counts[key]
-
-                self.log(f"  ✓ Verion (예약): {reservation_counts['verion']}건")
-                self.log(f"  ✓ Lensx: {reservation_counts['lensx']}건")
-                self.log(f"  ✓ EX500: {reservation_counts['ex500']}건")
-            else:
-                self.log("[3/3] 예약 파일 선택 안 함 (건너뜀)")
-
-            self.log("")
-
-            # 스캔 결과를 인스턴스 변수에 저장
-            self.scan_results = {
-                'glaucoma_count': glaucoma_count,
-                'fundus_count': fundus_count,
-                'reservation_counts': reservation_counts
-            }
-
-            # 결과 Entry 위젯 업데이트
-            self.root.after(0, self.update_result_entries)
-
-            self.log("=" * 54)
-            self.log("✅ 스캔 완료! 결과를 확인하고 수정 후 PDF 출력 버튼을 클릭하세요.")
-            self.log("=" * 54)
-            self.log("")
-
-        except Exception as e:
-            self.log("")
-            self.log("=" * 54)
-            self.log(f"❌ 오류 발생: {str(e)}")
-            self.log("=" * 54)
-            self.scan_button.config(state='normal')
-            self.file_button.config(state='normal')
-
-        finally:
-            # 로그 파일 닫기
-            if self.log_file_handle:
-                try:
-                    self.log_file_handle.close()
-                    self.log_file_handle = None
-                except Exception as e:
-                    print(f"로그 파일 닫기 오류: {e}")
-
-    def update_result_entries(self):
-        """스캔 결과를 Entry 위젯에 표시하고 편집 가능하게 설정"""
-        # 각 항목의 값 설정
-        entry_values = {
-            'OQAS': len(self.system.chart_numbers.get('OQAS', set())),
-            'HFA': len(self.system.chart_numbers.get('HFA', set())),
-            'OCT': len(self.system.chart_numbers.get('OCT', set())) + int(self.octs_entry.get() or 0),
-            'ORB': len(self.system.chart_numbers.get('ORB', set())),
-            'SP': len(self.system.chart_numbers.get('SP', set())),
-            'TOPO': len(self.system.chart_numbers.get('TOPO', set())),
-            'GLAUCOMA': self.scan_results['glaucoma_count'],
-            'FUNDUS': self.scan_results['fundus_count'],
-            'LASIK': int(self.lasik_entry.get() or 0),
-            'GLASSES': int(self.glasses_entry.get() or 0),
-            'FAG': int(self.fag_entry.get() or 0),
-            'VERION': self.scan_results['reservation_counts']['verion'],
-            'LENSX': self.scan_results['reservation_counts']['lensx'],
-            'EX500': self.scan_results['reservation_counts']['ex500'],
-        }
-
-        # Entry 위젯 업데이트 및 편집 가능하게 설정
-        for key, value in entry_values.items():
-            entry = self.result_entries[key]
-            entry.config(state='normal')
-            entry.delete(0, tk.END)
-            entry.insert(0, str(value))
-
-        # PDF 출력 버튼 활성화
-        self.output_button.config(state='normal')
-        self.scan_button.config(state='normal')
-        self.file_button.config(state='normal')
-
-    def process_output(self):
-        """2단계: PDF 출력 - Entry 위젯의 값을 읽어서 엑셀/PDF 생성"""
-        # 로그 파일 열기
-        log_filename = f"결산로그_{date.today().strftime('%Y-%m-%d')}.txt"
-        try:
-            self.log_file_handle = open(log_filename, 'a', encoding='utf-8')  # append 모드
-        except Exception as e:
-            print(f"로그 파일 열기 오류: {e}")
-            self.log_file_handle = None
-
-        try:
-            self.log("")
-            self.log("=" * 54)
-            self.log(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] PDF 출력 시작")
-            self.log("=" * 54)
-            self.log("")
-
-            # Entry 위젯에서 값 읽기
-            self.log("[1/2] 확정된 값:")
-            try:
-                result_values = {}
-                for key, entry in self.result_entries.items():
-                    value = int(entry.get() or 0)
-                    result_values[key] = value
-                    label_map = {
-                        'OQAS': '백내장', 'HFA': '시야', 'OCT': 'OCT', 'ORB': 'ORB',
-                        'SP': '내피', 'TOPO': 'Tomey', 'GLAUCOMA': '녹내장', 'FUNDUS': '안저',
-                        'LASIK': '라식', 'GLASSES': '안경검사', 'FAG': 'FAG',
-                        'VERION': 'Verion', 'LENSX': 'LensX', 'EX500': 'EX500'
-                    }
-                    self.log(f"  {label_map.get(key, key)}: {value}건")
-            except ValueError as e:
-                self.log(f"  ⚠️  값 읽기 오류: {e}")
-                self.output_button.config(state='normal')
-                return
-
-            self.log("")
-
-            # 엑셀 작성용 데이터 준비
-            staff_selected = self.get_selected_staff()
-            if not staff_selected:
-                self.log("  ⚠️  경고: 직원이 선택되지 않았습니다.")
-
-            # 예약 데이터
-            reservation_counts = {
-                'verion': result_values['VERION'],
-                'lensx': result_values['LENSX'],
-                'ex500': result_values['EX500']
-            }
-
-            # 수동 입력 데이터
-            manual_lasik = result_values['LASIK']
-            manual_fag = result_values['FAG']
-            manual_glasses = result_values['GLASSES']
-            manual_octs = 0  # OCTS는 OCT에 이미 포함됨
-
-            # 자동 스캔 데이터를 직접 설정 (Entry 값으로 덮어쓰기)
-            self.system.chart_numbers['OQAS'] = set(range(result_values['OQAS']))  # 더미 데이터
-            self.system.chart_numbers['HFA'] = set(range(result_values['HFA']))
-            self.system.chart_numbers['OCT'] = set(range(result_values['OCT']))
-            self.system.chart_numbers['ORB'] = set(range(result_values['ORB']))
-            self.system.chart_numbers['SP'] = set(range(result_values['SP']))
-            self.system.chart_numbers['TOPO'] = set(range(result_values['TOPO']))
-
-            # 특수 항목도 더미 데이터로 설정
-            self.system.chart_numbers['녹내장'] = set(range(result_values['GLAUCOMA']))
-            self.system.chart_numbers['안저'] = set(range(result_values['FUNDUS']))
-
-            # 엑셀 작성
-            self.log("[2/2] 엑셀 파일 작성 및 PDF 생성 중...")
-
-            today_str = date.today().strftime('%Y%m%d')
-            temp_excel = f"일일결산_{today_str}_temp.xlsx"
-
-            success = self.system.write_excel(
-                temp_excel, staff_selected, manual_fag, manual_glasses, manual_lasik,
-                manual_octs, reservation_counts, self.log,
-                glaucoma_count=result_values['GLAUCOMA'],
-                fundus_count=result_values['FUNDUS']
-            )
-
-            if not success:
-                self.log("")
-                self.log("=" * 54)
-                self.log("❌ 결산 실패: 엑셀 작성 오류")
-                self.log("=" * 54)
-                self.output_button.config(state='normal')
-                return
-
-            self.log("")
-
-            # PDF 변환
-            pdf_path = self.system.config['output_pdf'].replace('{date}', today_str)
-            pdf_success = self.system.convert_to_pdf(temp_excel, pdf_path, self.log)
-
-            self.log("")
-            self.log("=" * 54)
-            self.log("✅ 결산 완료!")
-            self.log("=" * 54)
-            self.log("")
-
-            # PDF 열기
-            if pdf_success and os.path.exists(pdf_path):
-                self.log("📄 PDF 파일을 엽니다...")
-                if sys.platform == 'win32':
-                    os.startfile(pdf_path)
-                else:
-                    self.log(f"  PDF 경로: {pdf_path}")
-
-                try:
-                    os.remove(temp_excel)
-                except:
-                    pass
-            else:
-                self.log(f"📄 엑셀 파일이 저장되었습니다: {temp_excel}")
-
-        except Exception as e:
-            self.log("")
-            self.log("=" * 54)
-            self.log(f"❌ 오류 발생: {str(e)}")
-            self.log("=" * 54)
-
-        finally:
-            # 로그 파일 닫기
-            if self.log_file_handle:
-                try:
-                    self.log_file_handle.close()
-                    self.log_file_handle = None
-                except Exception as e:
-                    print(f"로그 파일 닫기 오류: {e}")
-
-            self.output_button.config(state='normal')
-
     def run_report(self):
-        """결산 실행 (구버전 호환용 - 사용 안 함)"""
+        """결산 실행"""
         self.run_button.config(state='disabled')
         self.file_button.config(state='disabled')
 
@@ -1515,231 +1127,6 @@ class DailyReportGUI:
 
             self.run_button.config(state='normal')
             self.file_button.config(state='normal')
-
-    def open_settings(self):
-        """설정 창 열기"""
-        settings_window = tk.Toplevel(self.root)
-        settings_window.title("경로 설정")
-        settings_window.geometry("800x600")
-        settings_window.resizable(True, True)
-
-        # 스크롤 가능한 프레임 생성
-        canvas = tk.Canvas(settings_window)
-        scrollbar = ttk.Scrollbar(settings_window, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        # 설정 항목 저장용 딕셔너리
-        path_entries = {}
-
-        row = 0
-
-        # 1. 템플릿 파일 경로
-        ttk.Label(scrollable_frame, text="📄 템플릿 파일", font=("", 11, "bold")).grid(
-            row=row, column=0, columnspan=3, sticky=tk.W, pady=(10, 5), padx=10
-        )
-        row += 1
-
-        ttk.Label(scrollable_frame, text="템플릿 경로:").grid(row=row, column=0, sticky=tk.W, padx=(20, 5))
-        template_entry = ttk.Entry(scrollable_frame, width=50)
-        template_entry.insert(0, self.system.config.get('template_file', ''))
-        template_entry.grid(row=row, column=1, sticky=(tk.W, tk.E), padx=5)
-
-        def browse_template():
-            filename = filedialog.askopenfilename(
-                title="템플릿 파일 선택",
-                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
-            )
-            if filename:
-                template_entry.delete(0, tk.END)
-                template_entry.insert(0, filename)
-
-        ttk.Button(scrollable_frame, text="찾아보기", command=browse_template, width=10).grid(
-            row=row, column=2, padx=5
-        )
-        path_entries['template_file'] = template_entry
-        row += 1
-
-        ttk.Separator(scrollable_frame, orient='horizontal').grid(
-            row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10, padx=10
-        )
-        row += 1
-
-        # 2. 출력 PDF 경로
-        ttk.Label(scrollable_frame, text="📤 출력 PDF", font=("", 11, "bold")).grid(
-            row=row, column=0, columnspan=3, sticky=tk.W, pady=(10, 5), padx=10
-        )
-        row += 1
-
-        ttk.Label(scrollable_frame, text="PDF 경로:").grid(row=row, column=0, sticky=tk.W, padx=(20, 5))
-        pdf_entry = ttk.Entry(scrollable_frame, width=50)
-        pdf_entry.insert(0, self.system.config.get('output_pdf', ''))
-        pdf_entry.grid(row=row, column=1, sticky=(tk.W, tk.E), padx=5)
-
-        def browse_pdf():
-            dirname = filedialog.askdirectory(title="PDF 저장 폴더 선택")
-            if dirname:
-                current = pdf_entry.get()
-                filename = os.path.basename(current) if current else "일일결산_{date}.pdf"
-                new_path = os.path.join(dirname, filename)
-                pdf_entry.delete(0, tk.END)
-                pdf_entry.insert(0, new_path)
-
-        ttk.Button(scrollable_frame, text="찾아보기", command=browse_pdf, width=10).grid(
-            row=row, column=2, padx=5
-        )
-        path_entries['output_pdf'] = pdf_entry
-        row += 1
-
-        ttk.Separator(scrollable_frame, orient='horizontal').grid(
-            row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10, padx=10
-        )
-        row += 1
-
-        # 3. 장비 경로들
-        ttk.Label(scrollable_frame, text="🔬 장비 경로", font=("", 11, "bold")).grid(
-            row=row, column=0, columnspan=3, sticky=tk.W, pady=(10, 5), padx=10
-        )
-        row += 1
-
-        for eq_id, eq_info in self.system.config['equipment'].items():
-            eq_name = eq_info['name']
-            ttk.Label(scrollable_frame, text=f"{eq_name} ({eq_id}):").grid(
-                row=row, column=0, sticky=tk.W, padx=(20, 5)
-            )
-
-            entry = ttk.Entry(scrollable_frame, width=50)
-            entry.insert(0, eq_info.get('path', ''))
-            entry.grid(row=row, column=1, sticky=(tk.W, tk.E), padx=5)
-
-            def make_browse(eq_id_local, entry_local):
-                def browse():
-                    dirname = filedialog.askdirectory(title=f"{eq_id_local} 경로 선택")
-                    if dirname:
-                        entry_local.delete(0, tk.END)
-                        entry_local.insert(0, dirname)
-                return browse
-
-            ttk.Button(
-                scrollable_frame, text="찾아보기",
-                command=make_browse(eq_id, entry), width=10
-            ).grid(row=row, column=2, padx=5)
-
-            path_entries[f'equipment.{eq_id}.path'] = entry
-            row += 1
-
-        ttk.Separator(scrollable_frame, orient='horizontal').grid(
-            row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10, padx=10
-        )
-        row += 1
-
-        # 4. 안저 폴더 경로
-        ttk.Label(scrollable_frame, text="👁 안저 경로", font=("", 11, "bold")).grid(
-            row=row, column=0, columnspan=3, sticky=tk.W, pady=(10, 5), padx=10
-        )
-        row += 1
-
-        fundus_folders = self.system.config['special_items']['안저'].get('folders', {})
-        for folder_id, folder_info in fundus_folders.items():
-            ttk.Label(scrollable_frame, text=f"{folder_id}:").grid(
-                row=row, column=0, sticky=tk.W, padx=(20, 5)
-            )
-
-            entry = ttk.Entry(scrollable_frame, width=50)
-            entry.insert(0, folder_info.get('path', ''))
-            entry.grid(row=row, column=1, sticky=(tk.W, tk.E), padx=5)
-
-            def make_browse_fundus(folder_id_local, entry_local):
-                def browse():
-                    dirname = filedialog.askdirectory(title=f"안저 {folder_id_local} 경로 선택")
-                    if dirname:
-                        entry_local.delete(0, tk.END)
-                        entry_local.insert(0, dirname)
-                return browse
-
-            ttk.Button(
-                scrollable_frame, text="찾아보기",
-                command=make_browse_fundus(folder_id, entry), width=10
-            ).grid(row=row, column=2, padx=5)
-
-            path_entries[f'fundus.{folder_id}.path'] = entry
-            row += 1
-
-        # 버튼 프레임
-        button_frame = ttk.Frame(settings_window)
-        button_frame.pack(side="bottom", fill="x", padx=10, pady=10)
-
-        def save_settings():
-            """설정 저장"""
-            try:
-                # 템플릿 및 PDF 경로
-                self.system.config['template_file'] = path_entries['template_file'].get()
-                self.system.config['output_pdf'] = path_entries['output_pdf'].get()
-
-                # 장비 경로
-                for key, entry in path_entries.items():
-                    if key.startswith('equipment.'):
-                        _, eq_id, _ = key.split('.')
-                        self.system.config['equipment'][eq_id]['path'] = entry.get()
-                    elif key.startswith('fundus.'):
-                        _, folder_id, _ = key.split('.')
-                        self.system.config['special_items']['안저']['folders'][folder_id]['path'] = entry.get()
-
-                # config.json 저장
-                with open("config.json", 'w', encoding='utf-8') as f:
-                    json.dump(self.system.config, f, indent=2, ensure_ascii=False)
-
-                messagebox.showinfo("성공", "설정이 저장되었습니다.")
-                settings_window.destroy()
-
-            except Exception as e:
-                messagebox.showerror("오류", f"설정 저장 중 오류 발생:\n{str(e)}")
-
-        ttk.Button(button_frame, text="저장", command=save_settings, width=15).pack(side="right", padx=5)
-        ttk.Button(button_frame, text="취소", command=settings_window.destroy, width=15).pack(side="right")
-
-        # 스크롤 가능하게 마우스 휠 이벤트 바인딩
-        def on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-
-        canvas.bind_all("<MouseWheel>", on_mousewheel)
-
-    def reload_config(self):
-        """설정 다시 로드"""
-        try:
-            with open("config.json", 'r', encoding='utf-8') as f:
-                self.system.config = json.load(f)
-            messagebox.showinfo("성공", "설정을 다시 로드했습니다.")
-        except Exception as e:
-            messagebox.showerror("오류", f"설정 로드 중 오류 발생:\n{str(e)}")
-
-    def show_about(self):
-        """정보 표시"""
-        about_text = """일일결산 자동화 시스템 v2.0
-
-안과 검사실의 일일 통계를 자동으로 수집하고
-PDF 보고서를 생성하는 프로그램입니다.
-
-주요 기능:
-• 장비별 자동 스캔 (SP, TOPO, ORB, OCT, HFA, OQAS)
-• 특수 항목 계산 (녹내장, 안저)
-• 예약 파일 분석 (Verion, LensX, EX500)
-• 2단계 워크플로우 (스캔 → 확인/수정 → PDF 출력)
-• 경로 설정 기능
-
-© 2025 일일결산 자동화 시스템
-"""
-        messagebox.showinfo("일일결산 자동화 시스템", about_text)
 
 
 def main():

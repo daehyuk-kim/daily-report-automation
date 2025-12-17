@@ -120,7 +120,8 @@
   "reservation": {
     "search_keyword": "예약비고:",
     "verion_keywords": ["toric", "panoptix", "lens x", "lensx", "mono+lensx"],
-    "lensx_keywords": ["panoptix", "lens x", "lensx", "mono+lensx", "eyhance", "eyhance+lx", "eyhance +lx", "lx"],
+    "lensx_keywords": ["panoptix", "lens x", "lensx", "mono+lensx"],
+    "lensx_plus_pattern": true,
     "ex500_keywords": ["라식", "라섹", "lasik", "lasek", "올레이저"],
     "cells": {
       "verion": {"row": 19, "col": 3},
