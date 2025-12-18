@@ -596,9 +596,9 @@ class DailyReportSystem:
                             # 1. LensX 체크 (먼저 확인)
                             has_lensx = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['lensx_keywords'])
 
-                            # +lx 패턴 체크 (예: +lx, +lensx, +l.x, +lens.x, +LX, +LENSX 등)
+                            # +lx 패턴 체크 (예: +lx, +lensx, +lens x, +l.x, +lens.x, +LX, +LENSX 등)
                             if self.config['reservation'].get('lensx_plus_pattern', False):
-                                plus_lx_pattern = r'\+\s*[lL](?:ens)?\.?\s*[xX]'
+                                plus_lx_pattern = r'\+\s*[lL](?:ens)?[\s\.]*[xX]'
                                 if re.search(plus_lx_pattern, cell_value):
                                     has_lensx = True
 
@@ -644,9 +644,9 @@ class DailyReportSystem:
                         # 1. LensX 체크 (먼저 확인)
                         has_lensx = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['lensx_keywords'])
 
-                        # +lx 패턴 체크 (예: +lx, +lensx, +l.x, +lens.x, +LX, +LENSX 등)
+                        # +lx 패턴 체크 (예: +lx, +lensx, +lens x, +l.x, +lens.x, +LX, +LENSX 등)
                         if self.config['reservation'].get('lensx_plus_pattern', False):
-                            plus_lx_pattern = r'\+\s*[lL](?:ens)?\.?\s*[xX]'
+                            plus_lx_pattern = r'\+\s*[lL](?:ens)?[\s\.]*[xX]'
                             if re.search(plus_lx_pattern, cell_value):
                                 has_lensx = True
 
