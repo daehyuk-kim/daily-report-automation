@@ -592,7 +592,8 @@ class DailyReportSystem:
 
                             # 각 셀마다 베리온/LensX/EX500 플래그 체크 (중복 방지, 대소문자 무시)
                             cell_value_lower = cell_value.lower()
-                            has_verion = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['verion_keywords'])
+
+                            # 1. LensX 체크 (먼저 확인)
                             has_lensx = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['lensx_keywords'])
 
                             # +lx 패턴 체크 (예: +lx, +LX, + lx, +l.x, +L.X 등)
@@ -601,6 +602,12 @@ class DailyReportSystem:
                                 if re.search(plus_lx_pattern, cell_value):
                                     has_lensx = True
 
+                            # 2. Verion 체크 (toric 키워드 또는 LensX가 True인 경우)
+                            has_verion = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['verion_keywords'])
+                            if has_lensx:  # LensX를 하면 Verion도 카운팅
+                                has_verion = True
+
+                            # 3. EX500 체크
                             has_ex500 = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['ex500_keywords'])
 
                             if has_verion:
@@ -633,7 +640,8 @@ class DailyReportSystem:
 
                         # 각 셀마다 베리온/LensX/EX500 플래그 체크 (중복 방지, 대소문자 무시)
                         cell_value_lower = cell_value.lower()
-                        has_verion = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['verion_keywords'])
+
+                        # 1. LensX 체크 (먼저 확인)
                         has_lensx = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['lensx_keywords'])
 
                         # +lx 패턴 체크 (예: +lx, +LX, + lx, +l.x, +L.X 등)
@@ -642,6 +650,12 @@ class DailyReportSystem:
                             if re.search(plus_lx_pattern, cell_value):
                                 has_lensx = True
 
+                        # 2. Verion 체크 (toric 키워드 또는 LensX가 True인 경우)
+                        has_verion = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['verion_keywords'])
+                        if has_lensx:  # LensX를 하면 Verion도 카운팅
+                            has_verion = True
+
+                        # 3. EX500 체크
                         has_ex500 = any(kw.lower() in cell_value_lower for kw in self.config['reservation']['ex500_keywords'])
 
                         if has_verion:
