@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Report Automation - Standard Upgrade Prototype</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Noto Sans KR', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 16px;
+            padding: 24px 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #1a202c;
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .header .subtitle {
+            color: #718096;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-card .label {
+            color: #718096;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .stat-card .value {
+            color: #1a202c;
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-card .change {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .stat-card .change.positive {
+            color: #48bb78;
+        }
+
+        .stat-card .change.negative {
+            color: #f56565;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .panel-header h2 {
+            color: #1a202c;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .equipment-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .equipment-item {
+            padding: 16px;
+            border-radius: 8px;
+            background: #f7fafc;
+            border-left: 4px solid #667eea;
+            transition: all 0.2s;
+        }
+
+        .equipment-item:hover {
+            background: #edf2f7;
+            border-left-color: #764ba2;
+        }
+
+        .equipment-item .name {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .equipment-item .count {
+            font-size: 24px;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .equipment-item .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 8px;
+        }
+
+        .status.online {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status.offline {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .activity-log {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .activity-item {
+            padding: 12px;
+            border-left: 3px solid #e2e8f0;
+            margin-bottom: 12px;
+            transition: all 0.2s;
+        }
+
+        .activity-item:hover {
+            background: #f7fafc;
+            border-left-color: #667eea;
+        }
+
+        .activity-item .time {
+            font-size: 12px;
+            color: #718096;
+            margin-bottom: 4px;
+        }
+
+        .activity-item .message {
+            color: #2d3748;
+            font-size: 14px;
+        }
+
+        .form-section {
+            margin-bottom: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #4a5568;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .chart-container {
+            margin-top: 24px;
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 8px;
+        }
+
+        .chart-bars {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-around;
+            height: 200px;
+            gap: 8px;
+        }
+
+        .chart-bar {
+            flex: 1;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 4px 4px 0 0;
+            position: relative;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .chart-bar:hover {
+            opacity: 0.8;
+            transform: scaleY(1.05);
+        }
+
+        .chart-bar .value {
+            position: absolute;
+            top: -24px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .chart-label {
+            text-align: center;
+            margin-top: 8px;
+            font-size: 12px;
+            color: #718096;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 12px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+
+        .bottom-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 24px;
+        }
+
+        .notification {
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+
+        .notification.success {
+            background: #c6f6d5;
+            border-left: 4px solid #48bb78;
+        }
+
+        .notification.error {
+            background: #fed7d7;
+            border-left: 4px solid #f56565;
+        }
+
+        .notification.info {
+            background: #bee3f8;
+            border-left: 4px solid #4299e1;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .panel {
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .date-picker {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .date-picker button {
+            padding: 8px 16px;
+            border: 2px solid #e2e8f0;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .date-picker button:hover {
+            background: #f7fafc;
+            border-color: #667eea;
+        }
+
+        .date-picker button.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .equipment-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .bottom-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div>
+                <h1>📊 일일결산 자동화 시스템</h1>
+                <div class="subtitle">Standard Upgrade Preview - Seran Eye Clinic</div>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 24px; font-weight: 700; color: #667eea;">2026-01-25</div>
+                <div style="font-size: 14px; color: #718096;">토요일</div>
+            </div>
+        </div>
+
+        <!-- Stats Overview -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="label">오늘 총 검사</div>
+                <div class="value">247</div>
+                <div class="change positive">↑ 12% 전일 대비</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">녹내장 검사</div>
+                <div class="value">42</div>
+                <div class="change positive">↑ 8% 전일 대비</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">수술 건수</div>
+                <div class="value">15</div>
+                <div class="change negative">↓ 3% 전일 대비</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">근무 직원</div>
+                <div class="value">8명</div>
+                <div class="change" style="color: #4a5568;">평일 평균</div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Panel: Equipment Status -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>🔧 장비별 검사 현황</h2>
+                    <button class="btn btn-secondary" onclick="refreshData()">새로고침</button>
+                </div>
+
+                <div class="equipment-grid">
+                    <div class="equipment-item">
+                        <div class="name">💎 SP (내피)</div>
+                        <div class="count">38건</div>
+                        <span class="status online">● 정상</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 76%;"></div>
+                        </div>
+                    </div>
+                    <div class="equipment-item">
+                        <div class="name">👁️ HFA (시야)</div>
+                        <div class="count">45건</div>
+                        <span class="status online">● 정상</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 90%;"></div>
+                        </div>
+                    </div>
+                    <div class="equipment-item">
+                        <div class="name">📷 OCT</div>
+                        <div class="count">52건</div>
+                        <span class="status online">● 정상</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 100%;"></div>
+                        </div>
+                    </div>
+                    <div class="equipment-item">
+                        <div class="name">🔍 TOPO (Tomey)</div>
+                        <div class="count">31건</div>
+                        <span class="status online">● 정상</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 62%;"></div>
+                        </div>
+                    </div>
+                    <div class="equipment-item">
+                        <div class="name">🌟 ORB</div>
+                        <div class="count">28건</div>
+                        <span class="status online">● 정상</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 56%;"></div>
+                        </div>
+                    </div>
+                    <div class="equipment-item">
+                        <div class="name">☁️ OQAS (백내장)</div>
+                        <div class="count">23건</div>
+                        <span class="status online">● 정상</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 46%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="chart-container">
+                    <h3 style="margin-bottom: 16px; color: #2d3748;">주간 검사량 추이</h3>
+                    <div class="chart-bars">
+                        <div style="flex: 1; text-align: center;">
+                            <div class="chart-bar" style="height: 75%;">
+                                <span class="value">215</span>
+                            </div>
+                            <div class="chart-label">월</div>
+                        </div>
+                        <div style="flex: 1; text-align: center;">
+                            <div class="chart-bar" style="height: 85%;">
+                                <span class="value">237</span>
+                            </div>
+                            <div class="chart-label">화</div>
+                        </div>
+                        <div style="flex: 1; text-align: center;">
+                            <div class="chart-bar" style="height: 90%;">
+                                <span class="value">252</span>
+                            </div>
+                            <div class="chart-label">수</div>
+                        </div>
+                        <div style="flex: 1; text-align: center;">
+                            <div class="chart-bar" style="height: 80%;">
+                                <span class="value">223</span>
+                            </div>
+                            <div class="chart-label">목</div>
+                        </div>
+                        <div style="flex: 1; text-align: center;">
+                            <div class="chart-bar" style="height: 88%;">
+                                <span class="value">247</span>
+                            </div>
+                            <div class="chart-label">금</div>
+                        </div>
+                        <div style="flex: 1; text-align: center;">
+                            <div class="chart-bar" style="height: 65%; opacity: 0.5;">
+                                <span class="value">182</span>
+                            </div>
+                            <div class="chart-label">토</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Activity Log -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>📝 실시간 로그</h2>
+                </div>
+
+                <div class="activity-log">
+                    <div class="activity-item">
+                        <div class="time">18:45:23</div>
+                        <div class="message">✅ OCT 검사 완료 (환자: 206338)</div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="time">18:42:15</div>
+                        <div class="message">✅ HFA 검사 완료 (환자: 205123)</div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="time">18:38:47</div>
+                        <div class="message">✅ TOPO 스캔 완료 (31건)</div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="time">18:35:12</div>
+                        <div class="message">⚠️ ORB 네트워크 재연결 성공</div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="time">18:30:00</div>
+                        <div class="message">🔄 자동 스캔 시작</div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="time">18:25:33</div>
+                        <div class="message">✅ SP 데이터 수집 완료 (38건)</div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="time">18:20:15</div>
+                        <div class="message">📊 월간 통계 업데이트 완료</div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="time">18:15:00</div>
+                        <div class="message">💾 데이터베이스 백업 완료</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <div class="notification success">
+                        <div style="flex: 1;">
+                            <strong>시스템 정상</strong><br>
+                            <small>모든 장비가 정상 작동 중입니다.</small>
+                        </div>
+                    </div>
+                    <div class="notification info">
+                        <div style="flex: 1;">
+                            <strong>자동 결산 예정</strong><br>
+                            <small>오늘 저녁 6시에 자동 실행됩니다.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Grid -->
+        <div class="bottom-grid">
+            <!-- Quick Actions -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>⚡ 빠른 작업</h2>
+                </div>
+
+                <div class="date-picker">
+                    <button class="active">오늘</button>
+                    <button>어제</button>
+                    <button>이번 주</button>
+                    <button>이번 달</button>
+                </div>
+
+                <div class="form-section">
+                    <div class="form-group">
+                        <label>날짜 선택</label>
+                        <input type="date" value="2026-01-25">
+                    </div>
+                    <div class="form-group">
+                        <label>수기 입력</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <input type="number" placeholder="OCTS" value="5">
+                            <input type="number" placeholder="라식" value="3">
+                            <input type="number" placeholder="FAG" value="2">
+                            <input type="number" placeholder="안경검사" value="12">
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" style="width: 100%; padding: 16px; font-size: 16px;" onclick="generateReport()">
+                    🚀 결산 실행
+                </button>
+            </div>
+
+            <!-- Monthly Stats -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>📈 이번 달 통계</h2>
+                    <button class="btn btn-secondary">상세 보기</button>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="color: #4a5568; font-weight: 600;">총 검사</span>
+                        <span style="font-size: 20px; font-weight: 700; color: #667eea;">5,847건</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 78%;"></div>
+                    </div>
+                    <div style="font-size: 12px; color: #718096; margin-top: 4px;">목표의 78% 달성</div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="color: #4a5568; font-weight: 600;">수술</span>
+                        <span style="font-size: 20px; font-weight: 700; color: #667eea;">342건</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 85%;"></div>
+                    </div>
+                    <div style="font-size: 12px; color: #718096; margin-top: 4px;">목표의 85% 달성</div>
+                </div>
+
+                <div style="background: #f7fafc; padding: 16px; border-radius: 8px; margin-top: 20px;">
+                    <h4 style="margin-bottom: 12px; color: #2d3748;">인기 검사 TOP 3</h4>
+                    <div style="margin-bottom: 8px;">
+                        <span style="font-weight: 600;">1. OCT</span>
+                        <span style="float: right; color: #667eea;">1,245건</span>
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <span style="font-weight: 600;">2. HFA (시야)</span>
+                        <span style="float: right; color: #667eea;">1,123건</span>
+                    </div>
+                    <div>
+                        <span style="font-weight: 600;">3. SP (내피)</span>
+                        <span style="float: right; color: #667eea;">892건</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function refreshData() {
+            alert('데이터를 새로고침합니다...\n실제 구현 시 장비 데이터를 실시간으로 가져옵니다.');
+        }
+
+        function generateReport() {
+            alert('결산 실행 중...\n\n1. 6개 장비 데이터 스캔\n2. 차트번호 추출 및 중복 제거\n3. 특수 계산 (녹내장, 안저)\n4. PDF 생성\n5. 이메일 발송\n\n실제 구현 시 백엔드 API를 호출합니다.');
+        }
+
+        // Simulate real-time updates
+        setInterval(() => {
+            const activityLog = document.querySelector('.activity-log');
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+
+            const messages = [
+                '✅ 검사 완료',
+                '🔄 데이터 스캔 중',
+                '💾 저장 완료',
+                '📊 통계 업데이트'
+            ];
+
+            const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+
+            const newItem = document.createElement('div');
+            newItem.className = 'activity-item';
+            newItem.innerHTML = `
+                <div class="time">${timeStr}</div>
+                <div class="message">${randomMessage}</div>
+            `;
+
+            activityLog.insertBefore(newItem, activityLog.firstChild);
+
+            // Keep only last 10 items
+            while (activityLog.children.length > 10) {
+                activityLog.removeChild(activityLog.lastChild);
+            }
+        }, 5000);
+    </script>
+</body>
+</html>
