@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>일일결산 UI 예시 4가지 (수정 가능 버전)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 32px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .example-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .example-header {
+            padding: 15px 20px;
+            font-weight: bold;
+            font-size: 18px;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .example-header .badge {
+            background: rgba(255,255,255,0.3);
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+
+        /* Example 1: Modern Blue (현재와 유사) */
+        .ex1 .example-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .ex1 .ui-layout {
+            display: grid;
+            grid-template-columns: 250px 200px 1fr;
+            height: 500px;
+        }
+
+        .ex1 .left-panel {
+            background: #f8f9fa;
+            padding: 20px;
+            border-right: 2px solid #e9ecef;
+        }
+
+        .ex1 .middle-panel {
+            background: #fff;
+            padding: 20px;
+            border-right: 2px solid #e9ecef;
+        }
+
+        .ex1 .right-panel {
+            background: #f8f9fa;
+            padding: 20px;
+        }
+
+        .ex1 .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+        }
+
+        .ex1 .section-title::before {
+            content: '●';
+            margin-right: 8px;
+        }
+
+        .ex1 .section-title.editable::after {
+            content: '✏️';
+            margin-left: 8px;
+            font-size: 12px;
+        }
+
+        .ex1 .input-group {
+            margin-bottom: 15px;
+        }
+
+        .ex1 .input-label {
+            font-size: 12px;
+            color: #6c757d;
+            margin-bottom: 4px;
+        }
+
+        .ex1 .input-field {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .ex1 .result-input {
+            width: 60px;
+            padding: 6px 10px;
+            border: 2px solid #667eea;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #667eea;
+            text-align: center;
+            background: #f0f4ff;
+        }
+
+        .ex1 .btn-primary {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .ex1 .result-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+            font-size: 13px;
+        }
+
+        .ex1 .log-area {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            height: 440px;
+            overflow-y: auto;
+        }
+
+        /* Example 2: Clean White (미니멀) */
+        .ex2 .example-header {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .ex2 .ui-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            height: 500px;
+        }
+
+        .ex2 .left-panel {
+            background: #ffffff;
+            padding: 25px;
+            border-right: 1px solid #e0e0e0;
+        }
+
+        .ex2 .right-panel {
+            background: #fafafa;
+            padding: 25px;
+        }
+
+        .ex2 .section-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: #11998e;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #11998e;
+        }
+
+        .ex2 .section-title.editable {
+            position: relative;
+        }
+
+        .ex2 .section-title.editable::after {
+            content: '수정 가능';
+            position: absolute;
+            right: 0;
+            font-size: 10px;
+            background: #11998e;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .ex2 .input-group {
+            margin-bottom: 18px;
+        }
+
+        .ex2 .input-label {
+            font-size: 13px;
+            color: #333;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .ex2 .input-field {
+            width: 100%;
+            padding: 10px 14px;
+            border: none;
+            border-bottom: 2px solid #e0e0e0;
+            font-size: 14px;
+            background: transparent;
+            transition: border-color 0.3s;
+        }
+
+        .ex2 .input-field:focus {
+            outline: none;
+            border-bottom-color: #11998e;
+        }
+
+        .ex2 .btn-primary {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 15px;
+            box-shadow: 0 4px 15px rgba(17, 153, 142, 0.3);
+        }
+
+        .ex2 .results-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .ex2 .result-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+
+        .ex2 .result-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(17, 153, 142, 0.2);
+        }
+
+        .ex2 .result-label {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .ex2 .result-value-input {
+            width: 100%;
+            font-size: 28px;
+            font-weight: bold;
+            color: #11998e;
+            border: none;
+            border-bottom: 2px dashed #11998e;
+            text-align: center;
+            background: transparent;
+        }
+
+        .ex2 .result-value-input:focus {
+            outline: none;
+            border-bottom-style: solid;
+        }
+
+        /* Example 3: Dark Theme (다크모드) */
+        .ex3 .example-header {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .ex3 .ui-layout {
+            display: grid;
+            grid-template-columns: 260px 220px 1fr;
+            height: 500px;
+            background: #1a1a2e;
+        }
+
+        .ex3 .left-panel {
+            background: #16213e;
+            padding: 20px;
+            border-right: 1px solid #0f3460;
+        }
+
+        .ex3 .middle-panel {
+            background: #1a1a2e;
+            padding: 20px;
+            border-right: 1px solid #0f3460;
+        }
+
+        .ex3 .right-panel {
+            background: #16213e;
+            padding: 20px;
+        }
+
+        .ex3 .section-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #f093fb;
+            margin-bottom: 12px;
+            text-shadow: 0 0 10px rgba(240, 147, 251, 0.5);
+        }
+
+        .ex3 .section-title.editable::after {
+            content: '(수정가능)';
+            margin-left: 8px;
+            font-size: 10px;
+            color: #ff6b9d;
+        }
+
+        .ex3 .input-group {
+            margin-bottom: 14px;
+        }
+
+        .ex3 .input-label {
+            font-size: 12px;
+            color: #a8a8a8;
+            margin-bottom: 4px;
+        }
+
+        .ex3 .input-field {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #0f3460;
+            border-radius: 6px;
+            font-size: 13px;
+            background: #0f3460;
+            color: #e94560;
+            font-weight: bold;
+        }
+
+        .ex3 .result-input {
+            width: 60px;
+            padding: 6px 10px;
+            border: 2px solid #f093fb;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #f093fb;
+            text-align: center;
+            background: #0f3460;
+        }
+
+        .ex3 .btn-primary {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            box-shadow: 0 0 20px rgba(240, 147, 251, 0.4);
+        }
+
+        .ex3 .result-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #0f3460;
+            font-size: 13px;
+            color: #a8a8a8;
+        }
+
+        .ex3 .log-area {
+            background: #0f3460;
+            color: #00d4ff;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            height: 440px;
+            overflow-y: auto;
+            border: 1px solid #f093fb;
+        }
+
+        /* Example 4: Medical Professional (의료 전문) */
+        .ex4 .example-header {
+            background: linear-gradient(135deg, #0066cc 0%, #00a896 100%);
+        }
+
+        .ex4 .ui-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            height: 500px;
+            gap: 2px;
+            background: #e8f4f8;
+        }
+
+        .ex4 .left-panel {
+            background: #ffffff;
+            padding: 25px;
+        }
+
+        .ex4 .right-panel {
+            background: #ffffff;
+            padding: 25px;
+        }
+
+        .ex4 .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #0066cc;
+            margin-bottom: 20px;
+            padding: 12px;
+            background: #e8f4f8;
+            border-left: 4px solid #0066cc;
+            position: relative;
+        }
+
+        .ex4 .section-title.editable::after {
+            content: '✏️ 수정가능';
+            position: absolute;
+            right: 12px;
+            font-size: 12px;
+            background: #0066cc;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 4px;
+        }
+
+        .ex4 .input-row {
+            display: grid;
+            grid-template-columns: 120px 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+
+        .ex4 .input-label {
+            font-size: 14px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .ex4 .input-field {
+            padding: 10px 14px;
+            border: 2px solid #e8f4f8;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .ex4 .input-field:focus {
+            outline: none;
+            border-color: #0066cc;
+        }
+
+        .ex4 .btn-primary {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #0066cc 0%, #00a896 100%);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        .ex4 .results-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 8px;
+        }
+
+        .ex4 .results-table tr {
+            background: #f8fcff;
+        }
+
+        .ex4 .results-table td {
+            padding: 12px 15px;
+            font-size: 14px;
+        }
+
+        .ex4 .results-table td:first-child {
+            color: #666;
+            font-weight: 500;
+            border-left: 3px solid #0066cc;
+        }
+
+        .ex4 .results-table td:last-child {
+            text-align: right;
+        }
+
+        .ex4 .result-table-input {
+            width: 80px;
+            padding: 8px;
+            border: 2px solid #0066cc;
+            border-radius: 4px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #0066cc;
+            text-align: center;
+        }
+
+        .comparison {
+            margin-top: 40px;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .comparison h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .comparison-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .comparison-table td:first-child {
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .tag-pro {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .tag-con {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .highlight-box {
+            margin-top: 30px;
+            padding: 20px;
+            background: #fff3cd;
+            border-radius: 8px;
+            border-left: 4px solid #ffc107;
+        }
+
+        .highlight-box h3 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .highlight-box ul {
+            color: #856404;
+            line-height: 1.8;
+            margin-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 일일결산 UI 예시 4가지 (수정 가능 버전)</h1>
+
+        <div class="grid">
+            <!-- Example 1: Modern Blue -->
+            <div class="example-card ex1">
+                <div class="example-header">
+                    <span>예시 1: Modern Blue (현재 스타일)</span>
+                    <span class="badge">깔끔함</span>
+                </div>
+                <div class="ui-layout">
+                    <div class="left-panel">
+                        <div class="section-title">📅 결산 날짜</div>
+                        <div class="input-group">
+                            <div class="input-label">날짜</div>
+                            <input type="text" class="input-field" value="2026-01-25" readonly>
+                        </div>
+
+                        <div class="section-title">👥 근무 인원</div>
+                        <div class="input-group">
+                            <label><input type="checkbox" checked> 김철수</label><br>
+                            <label><input type="checkbox" checked> 이영희</label><br>
+                            <label><input type="checkbox" checked> 박민수</label>
+                        </div>
+
+                        <div class="section-title">✍ 수기 입력</div>
+                        <div class="input-group">
+                            <div class="input-label">라식</div>
+                            <input type="text" class="input-field" value="0">
+                        </div>
+                        <div class="input-group">
+                            <div class="input-label">FAG</div>
+                            <input type="text" class="input-field" value="0">
+                        </div>
+
+                        <button class="btn-primary">🔍 스캔 시작</button>
+                    </div>
+
+                    <div class="middle-panel">
+                        <div class="section-title editable">📊 스캔 결과</div>
+                        <div class="result-item">
+                            <span>백내장</span>
+                            <input type="number" class="result-input" value="12">
+                        </div>
+                        <div class="result-item">
+                            <span>시야</span>
+                            <input type="number" class="result-input" value="8">
+                        </div>
+                        <div class="result-item">
+                            <span>OCT</span>
+                            <input type="number" class="result-input" value="15">
+                        </div>
+                        <div class="result-item">
+                            <span>내피</span>
+                            <input type="number" class="result-input" value="6">
+                        </div>
+                        <div class="result-item">
+                            <span>녹내장</span>
+                            <input type="number" class="result-input" value="5">
+                        </div>
+                        <div class="result-item">
+                            <span>안저</span>
+                            <input type="number" class="result-input" value="10">
+                        </div>
+                        <button class="btn-primary">✅ 확정 및 PDF 출력</button>
+                    </div>
+
+                    <div class="right-panel">
+                        <div class="section-title">📋 실행 로그</div>
+                        <div class="log-area">
+[14:23:15] 스캔 시작...<br>
+[14:23:16] 📁 OQAS 폴더 스캔 중...<br>
+[14:23:17] ✅ 백내장: 12건<br>
+[14:23:18] 📁 HFA 폴더 스캔 중...<br>
+[14:23:19] ✅ 시야: 8건<br>
+[14:23:20] 📁 OCT 폴더 스캔 중...<br>
+[14:23:21] ✅ OCT: 15건<br>
+[14:23:22] ✅ 스캔 완료!<br>
+[14:23:22] 💡 결과를 확인하고 수정 후 PDF 출력하세요.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Example 2: Clean White -->
+            <div class="example-card ex2">
+                <div class="example-header">
+                    <span>예시 2: Clean White (미니멀)</span>
+                    <span class="badge">심플함</span>
+                </div>
+                <div class="ui-layout">
+                    <div class="left-panel">
+                        <div class="section-title">결산 정보</div>
+                        <div class="input-group">
+                            <div class="input-label">날짜</div>
+                            <input type="text" class="input-field" value="2026-01-25">
+                        </div>
+
+                        <div class="section-title">수기 입력</div>
+                        <div class="input-group">
+                            <div class="input-label">라식</div>
+                            <input type="text" class="input-field" value="0">
+                        </div>
+                        <div class="input-group">
+                            <div class="input-label">FAG</div>
+                            <input type="text" class="input-field" value="0">
+                        </div>
+                        <div class="input-group">
+                            <div class="input-label">안경검사</div>
+                            <input type="text" class="input-field" value="0">
+                        </div>
+                        <div class="input-group">
+                            <div class="input-label">OCTS</div>
+                            <input type="text" class="input-field" value="0">
+                        </div>
+
+                        <button class="btn-primary">스캔 시작</button>
+                        <button class="btn-primary" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin-top: 10px;">확정 및 PDF 출력</button>
+                    </div>
+
+                    <div class="right-panel">
+                        <div class="section-title editable">검사 결과</div>
+                        <div class="results-grid">
+                            <div class="result-card">
+                                <div class="result-label">백내장</div>
+                                <input type="number" class="result-value-input" value="12">
+                            </div>
+                            <div class="result-card">
+                                <div class="result-label">시야</div>
+                                <input type="number" class="result-value-input" value="8">
+                            </div>
+                            <div class="result-card">
+                                <div class="result-label">OCT</div>
+                                <input type="number" class="result-value-input" value="15">
+                            </div>
+                            <div class="result-card">
+                                <div class="result-label">ORB</div>
+                                <input type="number" class="result-value-input" value="4">
+                            </div>
+                            <div class="result-card">
+                                <div class="result-label">내피</div>
+                                <input type="number" class="result-value-input" value="6">
+                            </div>
+                            <div class="result-card">
+                                <div class="result-label">Tomey</div>
+                                <input type="number" class="result-value-input" value="7">
+                            </div>
+                            <div class="result-card">
+                                <div class="result-label">녹내장</div>
+                                <input type="number" class="result-value-input" value="5">
+                            </div>
+                            <div class="result-card">
+                                <div class="result-label">안저</div>
+                                <input type="number" class="result-value-input" value="10">
+                            </div>
+                            <div class="result-card">
+                                <div class="result-label">라식</div>
+                                <input type="number" class="result-value-input" value="0">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Example 3: Dark Theme -->
+            <div class="example-card ex3">
+                <div class="example-header">
+                    <span>예시 3: Dark Theme (다크모드)</span>
+                    <span class="badge">모던함</span>
+                </div>
+                <div class="ui-layout">
+                    <div class="left-panel">
+                        <div class="section-title">📅 결산 날짜</div>
+                        <div class="input-group">
+                            <div class="input-label">날짜</div>
+                            <input type="text" class="input-field" value="2026-01-25" readonly>
+                        </div>
+
+                        <div class="section-title">👥 근무 인원</div>
+                        <div class="input-group" style="color: #a8a8a8;">
+                            <label><input type="checkbox" checked> 김철수</label><br>
+                            <label><input type="checkbox" checked> 이영희</label><br>
+                            <label><input type="checkbox" checked> 박민수</label>
+                        </div>
+
+                        <div class="section-title">✍ 수기 입력</div>
+                        <div class="input-group">
+                            <div class="input-label">라식</div>
+                            <input type="text" class="input-field" value="0">
+                        </div>
+                        <div class="input-group">
+                            <div class="input-label">FAG</div>
+                            <input type="text" class="input-field" value="0">
+                        </div>
+
+                        <button class="btn-primary">🔍 스캔 시작</button>
+                    </div>
+
+                    <div class="middle-panel">
+                        <div class="section-title editable">📊 스캔 결과</div>
+                        <div class="result-item">
+                            <span>백내장</span>
+                            <input type="number" class="result-input" value="12">
+                        </div>
+                        <div class="result-item">
+                            <span>시야</span>
+                            <input type="number" class="result-input" value="8">
+                        </div>
+                        <div class="result-item">
+                            <span>OCT</span>
+                            <input type="number" class="result-input" value="15">
+                        </div>
+                        <div class="result-item">
+                            <span>내피</span>
+                            <input type="number" class="result-input" value="6">
+                        </div>
+                        <div class="result-item">
+                            <span>녹내장</span>
+                            <input type="number" class="result-input" value="5">
+                        </div>
+                        <div class="result-item">
+                            <span>안저</span>
+                            <input type="number" class="result-input" value="10">
+                        </div>
+                        <button class="btn-primary">✅ 확정 및 PDF 출력</button>
+                    </div>
+
+                    <div class="right-panel">
+                        <div class="section-title">📋 실행 로그</div>
+                        <div class="log-area">
+[14:23:15] 스캔 시작...<br>
+[14:23:16] 📁 OQAS 폴더 스캔 중...<br>
+[14:23:17] ✅ 백내장: 12건<br>
+[14:23:18] 📁 HFA 폴더 스캔 중...<br>
+[14:23:19] ✅ 시야: 8건<br>
+[14:23:20] 📁 OCT 폴더 스캔 중...<br>
+[14:23:21] ✅ OCT: 15건<br>
+[14:23:22] ✅ 스캔 완료!
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Example 4: Medical Professional -->
+            <div class="example-card ex4">
+                <div class="example-header">
+                    <span>예시 4: Medical Professional (의료 전문)</span>
+                    <span class="badge">전문적</span>
+                </div>
+                <div class="ui-layout">
+                    <div class="left-panel">
+                        <div class="section-title">결산 정보 입력</div>
+
+                        <div class="input-row">
+                            <div class="input-label">결산 날짜</div>
+                            <input type="text" class="input-field" value="2026-01-25">
+                        </div>
+
+                        <div class="input-row">
+                            <div class="input-label">근무 인원</div>
+                            <select class="input-field">
+                                <option>김철수, 이영희, 박민수 (3명)</option>
+                            </select>
+                        </div>
+
+                        <div class="section-title" style="margin-top: 20px;">수동 입력 항목</div>
+
+                        <div class="input-row">
+                            <div class="input-label">라식</div>
+                            <input type="text" class="input-field" value="0">
+                        </div>
+
+                        <div class="input-row">
+                            <div class="input-label">FAG</div>
+                            <input type="text" class="input-field" value="0">
+                        </div>
+
+                        <div class="input-row">
+                            <div class="input-label">안경검사</div>
+                            <input type="text" class="input-field" value="0">
+                        </div>
+
+                        <div class="input-row">
+                            <div class="input-label">OCTS</div>
+                            <input type="text" class="input-field" value="0">
+                        </div>
+
+                        <button class="btn-primary">스캔 및 결산 시작</button>
+                    </div>
+
+                    <div class="right-panel">
+                        <div class="section-title editable">검사 결과 요약</div>
+
+                        <table class="results-table">
+                            <tr>
+                                <td>백내장 (OQAS)</td>
+                                <td><input type="number" class="result-table-input" value="12"></td>
+                            </tr>
+                            <tr>
+                                <td>시야 검사 (HFA)</td>
+                                <td><input type="number" class="result-table-input" value="8"></td>
+                            </tr>
+                            <tr>
+                                <td>OCT 검사</td>
+                                <td><input type="number" class="result-table-input" value="15"></td>
+                            </tr>
+                            <tr>
+                                <td>ORB 검사</td>
+                                <td><input type="number" class="result-table-input" value="4"></td>
+                            </tr>
+                            <tr>
+                                <td>내피 검사 (SP)</td>
+                                <td><input type="number" class="result-table-input" value="6"></td>
+                            </tr>
+                            <tr>
+                                <td>Tomey (TOPO)</td>
+                                <td><input type="number" class="result-table-input" value="7"></td>
+                            </tr>
+                            <tr>
+                                <td>녹내장</td>
+                                <td><input type="number" class="result-table-input" value="5"></td>
+                            </tr>
+                            <tr>
+                                <td>안저 검사</td>
+                                <td><input type="number" class="result-table-input" value="10"></td>
+                            </tr>
+                        </table>
+
+                        <button class="btn-primary">PDF 보고서 생성</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comparison Table -->
+        <div class="comparison">
+            <h2>📋 디자인 비교표</h2>
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>특징</th>
+                        <th>예시 1: Modern Blue</th>
+                        <th>예시 2: Clean White</th>
+                        <th>예시 3: Dark Theme</th>
+                        <th>예시 4: Medical Pro</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>색상 테마</td>
+                        <td>보라-파랑 그라데이션</td>
+                        <td>민트-그린 그라데이션</td>
+                        <td>핑크-레드 그라데이션 (다크)</td>
+                        <td>파랑-틸 그라데이션</td>
+                    </tr>
+                    <tr>
+                        <td>레이아웃</td>
+                        <td>3단 (입력-결과-로그)</td>
+                        <td>2단 (입력-그리드결과)</td>
+                        <td>3단 (입력-결과-로그)</td>
+                        <td>2단 (입력-테이블결과)</td>
+                    </tr>
+                    <tr>
+                        <td>수정 방식</td>
+                        <td>작은 입력칸 (60px)</td>
+                        <td>큰 입력칸 (카드 내부)</td>
+                        <td>작은 입력칸 (60px)</td>
+                        <td>테이블 입력칸 (80px)</td>
+                    </tr>
+                    <tr>
+                        <td>적합한 환경</td>
+                        <td>일반 사무실</td>
+                        <td>밝은 환경</td>
+                        <td>어두운 환경, 장시간 작업</td>
+                        <td>병원 의료 환경</td>
+                    </tr>
+                    <tr>
+                        <td>장점</td>
+                        <td>
+                            <span class="tag tag-pro">균형잡힌 디자인</span>
+                            <span class="tag tag-pro">정보 밀도 적절</span>
+                            <span class="tag tag-pro">수정 편리</span>
+                        </td>
+                        <td>
+                            <span class="tag tag-pro">매우 깔끔함</span>
+                            <span class="tag tag-pro">빠른 결과 확인</span>
+                            <span class="tag tag-pro">직관적 수정</span>
+                        </td>
+                        <td>
+                            <span class="tag tag-pro">눈 피로도 낮음</span>
+                            <span class="tag tag-pro">세련된 느낌</span>
+                            <span class="tag tag-pro">집중력 향상</span>
+                        </td>
+                        <td>
+                            <span class="tag tag-pro">전문적</span>
+                            <span class="tag tag-pro">명확한 정보</span>
+                            <span class="tag tag-pro">테이블 수정</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>단점</td>
+                        <td>
+                            <span class="tag tag-con">평범할 수 있음</span>
+                        </td>
+                        <td>
+                            <span class="tag tag-con">로그 확인 불편</span>
+                        </td>
+                        <td>
+                            <span class="tag tag-con">밝은 곳에서 시인성 떨어짐</span>
+                        </td>
+                        <td>
+                            <span class="tag tag-con">테이블 공간 많이 차지</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>추천 대상</td>
+                        <td>현재 사용자 (변화 최소)</td>
+                        <td>미니멀 선호</td>
+                        <td>디자인 중시, 장시간 사용</td>
+                        <td>의료기관 전문성 강조</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="highlight-box">
+                <h3>✏️ 수정 가능 기능 강조!</h3>
+                <ul>
+                    <li><strong>예시 1, 3</strong>: 각 항목 옆에 작은 입력칸 (60px) - 컴팩트하고 빠른 수정</li>
+                    <li><strong>예시 2</strong>: 카드 안에 큰 입력칸 - 시각적으로 명확하고 클릭하기 쉬움</li>
+                    <li><strong>예시 4</strong>: 테이블 형식 입력칸 (80px) - 전문적이고 정렬된 느낌</li>
+                    <li><strong>모든 예시</strong>: 스캔 후 즉시 값 수정 가능, 확정 후 PDF 출력</li>
+                </ul>
+            </div>
+
+            <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
+                <h3 style="color: #2c3e50; margin-bottom: 10px;">💡 선택 가이드</h3>
+                <ul style="color: #495057; line-height: 1.8;">
+                    <li><strong>현재 UI 유지 + 수정 강화</strong> → 예시 1 (익숙함, 안정성, 입력칸 강조)</li>
+                    <li><strong>심플하게 개선 + 큰 입력칸</strong> → 예시 2 (깔끔함, 모던함, 시각적 명확)</li>
+                    <li><strong>완전히 새로운 느낌</strong> → 예시 3 (다크모드, 세련됨, 장시간 작업)</li>
+                    <li><strong>병원 전문성 + 테이블 수정</strong> → 예시 4 (신뢰감, 의료 환경, 정렬된 입력)</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
