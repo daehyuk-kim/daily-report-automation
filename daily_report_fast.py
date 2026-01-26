@@ -10,6 +10,7 @@ import sys
 import json
 import re
 import threading
+import requests
 from datetime import datetime, date, timedelta
 from typing import Set, Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -82,6 +83,28 @@ class DailyReportSystem:
         except json.JSONDecodeError:
             messagebox.showerror("오류", "설정 파일 형식이 올바르지 않습니다.")
             sys.exit(1)
+
+    def get_staff_from_api(self, target_date: date, department: str = "검사실") -> List[str]:
+        """Hospital Schedule API에서 검사실 근무 직원 조회"""
+        try:
+            api_url = self.config.get('hospital_schedule_api', {}).get('url', 'http://192.168.0.210:3001/api/schedule/today')
+            params = {
+                'date': target_date.strftime('%Y-%m-%d'),
+                'department': department
+            }
+
+            response = requests.get(api_url, params=params, timeout=3)
+
+            if response.status_code == 200:
+                data = response.json()
+                # API에서 근무 중인 직원만 필터링
+                staff_list = [s['name'] for s in data.get('staff', []) if s.get('status') == '근무']
+                return staff_list
+            else:
+                return None
+        except Exception:
+            # API 연결 실패 시 None 반환 (config의 staff_list 사용)
+            return None
 
     def is_valid_chart_number(self, chart_num_str: str) -> bool:
         """차트번호 유효성 검증"""
@@ -873,31 +896,42 @@ class DailyReportGUI:
                                                              sticky=(tk.W, tk.E), pady=5)
 
         # 1. 근무 인원 선택
-        staff_label = ttk.Label(left_frame, text="👥 근무 인원", font=("", 12, "bold"))
-        staff_label.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        staff_header_frame = ttk.Frame(left_frame)
+        staff_header_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 5))
+
+        staff_label = ttk.Label(staff_header_frame, text="👥 근무 인원", font=("", 12, "bold"))
+        staff_label.grid(row=0, column=0, sticky=tk.W)
+
+        # 새로고침 버튼 (Enter 키로도 가능)
+        refresh_btn = ttk.Button(staff_header_frame, text="🔄", width=3,
+                                command=self.refresh_staff_list)
+        refresh_btn.grid(row=0, column=1, padx=5)
+
+        # API 상태 라벨
+        self.api_status_label = ttk.Label(staff_header_frame, text="", foreground="gray", font=("", 9))
+        self.api_status_label.grid(row=0, column=2, sticky=tk.W)
 
         staff_canvas = tk.Canvas(left_frame, height=200)
         staff_scrollbar = ttk.Scrollbar(left_frame, orient="vertical", command=staff_canvas.yview)
-        staff_scrollable = ttk.Frame(staff_canvas)
+        self.staff_scrollable = ttk.Frame(staff_canvas)
 
-        staff_scrollable.bind(
+        self.staff_scrollable.bind(
             "<Configure>",
             lambda e: staff_canvas.configure(scrollregion=staff_canvas.bbox("all"))
         )
 
-        staff_canvas.create_window((0, 0), window=staff_scrollable, anchor="nw")
+        staff_canvas.create_window((0, 0), window=self.staff_scrollable, anchor="nw")
         staff_canvas.configure(yscrollcommand=staff_scrollbar.set)
 
         staff_canvas.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         staff_scrollbar.grid(row=4, column=1, sticky=(tk.N, tk.S), pady=(0, 10))
 
-        # 직원 체크박스 생성
+        # 직원 체크박스 생성 (초기 로드)
         self.staff_vars = {}
-        for i, staff_name in enumerate(self.system.config['staff_list']):
-            var = tk.BooleanVar(value=True)
-            self.staff_vars[staff_name] = var
-            cb = ttk.Checkbutton(staff_scrollable, text=staff_name, variable=var)
-            cb.grid(row=i, column=0, sticky=tk.W, padx=5, pady=2)
+        self.load_staff_list()
+
+        # 날짜 입력 필드에 Enter 키 바인딩
+        self.date_entry.bind('<Return>', lambda e: self.refresh_staff_list())
 
         # 2. 예약 파일 선택
         ttk.Separator(left_frame, orient='horizontal').grid(row=5, column=0, columnspan=2,
@@ -1021,6 +1055,59 @@ class DailyReportGUI:
         """날짜 설정"""
         self.date_entry.delete(0, tk.END)
         self.date_entry.insert(0, target_date.strftime('%Y-%m-%d'))
+        # 날짜 변경 시 직원 목록도 새로고침
+        self.refresh_staff_list()
+
+    def load_staff_list(self, staff_names: List[str] = None):
+        """직원 체크박스 생성 (초기 또는 갱신)"""
+        # 기존 체크박스 제거
+        for widget in self.staff_scrollable.winfo_children():
+            widget.destroy()
+
+        # staff_names가 없으면 config에서 가져오기
+        if staff_names is None:
+            staff_names = self.system.config['staff_list']
+
+        # 새 체크박스 생성
+        self.staff_vars = {}
+        for i, staff_name in enumerate(staff_names):
+            var = tk.BooleanVar(value=True)
+            self.staff_vars[staff_name] = var
+            cb = ttk.Checkbutton(self.staff_scrollable, text=staff_name, variable=var)
+            cb.grid(row=i, column=0, sticky=tk.W, padx=5, pady=2)
+
+    def refresh_staff_list(self):
+        """Hospital Schedule API에서 직원 목록 새로고침"""
+        try:
+            # 날짜 파싱
+            date_str = self.date_entry.get()
+            try:
+                target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                self.api_status_label.config(text="날짜 형식 오류", foreground="red")
+                return
+
+            # API에서 직원 목록 가져오기
+            api_staff = self.system.get_staff_from_api(target_date, "검사실")
+
+            if api_staff:
+                # API 성공
+                self.load_staff_list(api_staff)
+                self.api_status_label.config(
+                    text=f"API 연동 ({len(api_staff)}명)",
+                    foreground="green"
+                )
+            else:
+                # API 실패 → config 사용
+                self.load_staff_list()
+                self.api_status_label.config(
+                    text="config 사용",
+                    foreground="orange"
+                )
+        except Exception as e:
+            # 예외 발생 → config 사용
+            self.load_staff_list()
+            self.api_status_label.config(text="API 오류", foreground="red")
 
     def log(self, message: str):
         """로그 메시지 출력 (화면 + 파일)"""

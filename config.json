@@ -111,6 +111,13 @@
   "staff_cell": {"row": 6, "col": 2},
   "date_cell": {"row": 4, "col": 1},
 
+  "hospital_schedule_api": {
+    "url": "http://192.168.0.210:3001/api/schedule/today",
+    "enabled": true,
+    "department": "검사실",
+    "comment": "Hospital Schedule System API 연동 (날짜별 근무 직원 자동 로드)"
+  },
+
   "staff_list": [
     "김창범", "김수지", "김대혁", "김민지",
     "박현진", "고은서", "김현호", "임량현",
