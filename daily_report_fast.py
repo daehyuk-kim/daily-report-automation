@@ -85,25 +85,72 @@ class DailyReportSystem:
             sys.exit(1)
 
     def get_staff_from_api(self, target_date: date, department: str = "검사실") -> List[str]:
-        """Hospital Schedule API에서 검사실 근무 직원 조회"""
+        """로컬 스케줄 JSON 파일에서 오늘 근무하는 검사실 직원 조회
+
+        스케줄 시스템 로직: 등록된 사람 = 휴가/OFF, 등록 안 된 사람 = 근무
+        → 전체 직원에서 휴가자를 제외하는 방식
+        """
         try:
-            api_url = self.config.get('hospital_schedule_api', {}).get('url', 'http://192.168.0.210:3001/api/schedule/today')
-            params = {
-                'date': target_date.strftime('%Y-%m-%d'),
-                'department': department
-            }
+            api_config = self.config.get('hospital_schedule_api', {})
+            dept = api_config.get('department', department)
 
-            response = requests.get(api_url, params=params, timeout=3)
+            # 1. API에서 검사실 전체 직원 목록 가져오기
+            api_url = api_config.get('url', 'http://192.168.0.210:3001/api/employees')
+            response = requests.get(api_url, timeout=5)
 
-            if response.status_code == 200:
-                data = response.json()
-                # API에서 근무 중인 직원만 필터링
-                staff_list = [s['name'] for s in data.get('staff', []) if s.get('status') == '근무']
-                return staff_list
-            else:
+            if response.status_code != 200:
                 return None
-        except Exception:
-            # API 연결 실패 시 None 반환 (config의 staff_list 사용)
+
+            all_employees = response.json()
+            all_staff = [
+                emp['name'] for emp in all_employees
+                if emp.get('team') == dept and emp.get('status') == 'active'
+            ]
+
+            # 2. 스케줄 파일에서 오늘 휴가/OFF인 직원 찾기
+            # 네트워크 경로와 로컬 경로 모두 시도
+            schedule_paths = [
+                api_config.get('schedule_data_path', r"\\OPTOS2\Users\USER-PC\hospital-schedule-system\data"),
+                r"C:\Users\USER-PC\hospital-schedule-system\data"
+            ]
+
+            schedule_file = None
+            for schedule_dir in schedule_paths:
+                candidate = os.path.join(
+                    schedule_dir,
+                    f"schedule_{target_date.year}_{target_date.month:02d}.json"
+                )
+                if os.path.exists(candidate):
+                    schedule_file = candidate
+                    break
+
+            off_staff = set()
+            if schedule_file:
+                with open(schedule_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+
+                target_date_str = target_date.strftime('%Y-%m-%d')
+                schedule_entries = data.get('schedule', {})
+
+                for key, entry in schedule_entries.items():
+                    employee = entry.get('employee', {})
+                    schedule = entry.get('schedule', {})
+
+                    # 검사실 팀 + 오늘 날짜 + 휴가/OFF/기타 상태 제외 (h1, h2, 기타)
+                    # h3 반차는 일을 했으므로 포함
+                    schedule_value = schedule.get('value', '')
+                    if (employee.get('team') == dept and
+                        schedule.get('date') == target_date_str and
+                        (schedule_value in ('h1', 'h2') or schedule_value.startswith('기타'))):
+                        off_staff.add(employee.get('name'))
+
+            # 3. 전체 직원에서 휴가자 제외
+            working_staff = [name for name in all_staff if name not in off_staff]
+
+            return working_staff if working_staff else None
+
+        except Exception as e:
+            # 오류 시 None 반환 (config의 staff_list 사용)
             return None
 
     def is_valid_chart_number(self, chart_num_str: str) -> bool:
@@ -895,7 +942,7 @@ class DailyReportGUI:
         ttk.Separator(left_frame, orient='horizontal').grid(row=2, column=0, columnspan=2,
                                                              sticky=(tk.W, tk.E), pady=5)
 
-        # 1. 근무 인원 선택
+        # 1. 근무 인원 (자동 로드)
         staff_header_frame = ttk.Frame(left_frame)
         staff_header_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 5))
 
@@ -911,7 +958,12 @@ class DailyReportGUI:
         self.api_status_label = ttk.Label(staff_header_frame, text="", foreground="gray", font=("", 9))
         self.api_status_label.grid(row=0, column=2, sticky=tk.W)
 
-        staff_canvas = tk.Canvas(left_frame, height=200)
+        # 인원 수 라벨
+        self.staff_count_label = ttk.Label(staff_header_frame, text="", foreground="blue", font=("", 10, "bold"))
+        self.staff_count_label.grid(row=0, column=3, padx=(10, 0), sticky=tk.W)
+
+        # 직원 체크박스 프레임 (스크롤 가능)
+        staff_canvas = tk.Canvas(left_frame, height=100)
         staff_scrollbar = ttk.Scrollbar(left_frame, orient="vertical", command=staff_canvas.yview)
         self.staff_scrollable = ttk.Frame(staff_canvas)
 
@@ -926,9 +978,10 @@ class DailyReportGUI:
         staff_canvas.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         staff_scrollbar.grid(row=4, column=1, sticky=(tk.N, tk.S), pady=(0, 10))
 
-        # 직원 체크박스 생성 (초기 로드)
+        # 직원 체크박스 변수들
         self.staff_vars = {}
-        self.load_staff_list()
+        self.current_staff = []
+        self.refresh_staff_list()
 
         # 날짜 입력 필드에 Enter 키 바인딩
         self.date_entry.bind('<Return>', lambda e: self.refresh_staff_list())
@@ -1059,7 +1112,7 @@ class DailyReportGUI:
         self.refresh_staff_list()
 
     def load_staff_list(self, staff_names: List[str] = None):
-        """직원 체크박스 생성 (초기 또는 갱신)"""
+        """직원 체크박스 생성 (자동 로드된 인원은 체크됨)"""
         # 기존 체크박스 제거
         for widget in self.staff_scrollable.winfo_children():
             widget.destroy()
@@ -1068,16 +1121,31 @@ class DailyReportGUI:
         if staff_names is None:
             staff_names = self.system.config['staff_list']
 
-        # 새 체크박스 생성
+        # 현재 근무 인원 저장
+        self.current_staff = staff_names
+
+        # 인원 수 표시
+        self.staff_count_label.config(text=f"{len(staff_names)}명")
+
+        # 전체 직원 목록 (config에서)
+        all_staff = self.system.config.get('staff_list', [])
+
+        # 체크박스 생성 (2열로 배치)
         self.staff_vars = {}
-        for i, staff_name in enumerate(staff_names):
-            var = tk.BooleanVar(value=True)
+        for i, staff_name in enumerate(all_staff):
+            var = tk.BooleanVar(value=(staff_name in staff_names))
             self.staff_vars[staff_name] = var
-            cb = ttk.Checkbutton(self.staff_scrollable, text=staff_name, variable=var)
-            cb.grid(row=i, column=0, sticky=tk.W, padx=5, pady=2)
+            cb = ttk.Checkbutton(self.staff_scrollable, text=staff_name, variable=var,
+                                command=self.update_staff_count)
+            cb.grid(row=i // 2, column=i % 2, sticky=tk.W, padx=5, pady=1)
+
+    def update_staff_count(self):
+        """체크된 직원 수 업데이트"""
+        count = sum(1 for var in self.staff_vars.values() if var.get())
+        self.staff_count_label.config(text=f"{count}명")
 
     def refresh_staff_list(self):
-        """Hospital Schedule API에서 직원 목록 새로고침"""
+        """Hospital Schedule API에서 직원 목록 자동 로드"""
         try:
             # 날짜 파싱
             date_str = self.date_entry.get()
@@ -1085,29 +1153,30 @@ class DailyReportGUI:
                 target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
             except ValueError:
                 self.api_status_label.config(text="날짜 형식 오류", foreground="red")
+                self.load_staff_list()
                 return
 
             # API에서 직원 목록 가져오기
             api_staff = self.system.get_staff_from_api(target_date, "검사실")
 
             if api_staff:
-                # API 성공
+                # API 성공 - 자동 로드
                 self.load_staff_list(api_staff)
                 self.api_status_label.config(
-                    text=f"API 연동 ({len(api_staff)}명)",
+                    text="✓ API 자동 로드",
                     foreground="green"
                 )
             else:
-                # API 실패 → config 사용
+                # API 실패 → config 전체 사용
                 self.load_staff_list()
                 self.api_status_label.config(
-                    text="config 사용",
+                    text="⚠ API 연결 실패 (config 전체)",
                     foreground="orange"
                 )
         except Exception as e:
-            # 예외 발생 → config 사용
+            # 예외 발생 → config 전체 사용
             self.load_staff_list()
-            self.api_status_label.config(text="API 오류", foreground="red")
+            self.api_status_label.config(text="⚠ API 오류 (config 전체)", foreground="red")
 
     def log(self, message: str):
         """로그 메시지 출력 (화면 + 파일)"""
@@ -1141,7 +1210,7 @@ class DailyReportGUI:
             self.file_label.config(text="선택된 파일: 없음", foreground="gray")
 
     def get_selected_staff(self) -> List[str]:
-        """선택된 직원 목록 반환"""
+        """체크된 직원 목록 반환"""
         return [name for name, var in self.staff_vars.items() if var.get()]
 
     def run_scan(self):
@@ -1811,9 +1880,20 @@ class DailyReportGUI:
 
         # 스크롤 가능하게 마우스 휠 이벤트 바인딩
         def on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            try:
+                if canvas.winfo_exists():
+                    canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            except:
+                pass
 
         canvas.bind_all("<MouseWheel>", on_mousewheel)
+
+        # 창 닫힐 때 이벤트 바인딩 해제
+        def on_close():
+            canvas.unbind_all("<MouseWheel>")
+            settings_window.destroy()
+
+        settings_window.protocol("WM_DELETE_WINDOW", on_close)
 
     def reload_config(self):
         """설정 다시 로드"""
