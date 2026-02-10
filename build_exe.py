@@ -32,16 +32,17 @@ except ImportError:
 options = [
     "daily_report_fast.py",
     "--name=일일결산자동화",
-    "--onefile",  # 단일 EXE 파일
-    "--windowed",  # GUI 모드 (콘솔 숨김)
-    "--icon=NONE",  # 아이콘 없음 (필요시 .ico 파일 지정)
-    "--add-data=config.json;.",  # config.json 포함
+    "--onefile",
+    "--windowed",
+    "--icon=NONE",
     "--hidden-import=openpyxl",
     "--hidden-import=pandas",
     "--hidden-import=xlrd",
+    "--hidden-import=requests",
     "--hidden-import=win32com.client",
     "--hidden-import=pythoncom",
-    "--clean",  # 이전 빌드 정리
+    "--hidden-import=file_cache_manager",
+    "--clean",
 ]
 
 print("\n빌드 시작...")
@@ -50,14 +51,23 @@ print()
 
 try:
     subprocess.check_call(["pyinstaller"] + options)
+
+    # 배포 폴더 구성: dist에 config.json 복사
+    import shutil
+    dist_dir = os.path.abspath("dist")
+    config_src = os.path.join(os.path.dirname(__file__), "config.json")
+    config_dst = os.path.join(dist_dir, "config.json")
+    if os.path.exists(config_src):
+        shutil.copy2(config_src, config_dst)
+        print(f"✅ config.json → dist/ 복사 완료")
+
     print("\n" + "=" * 70)
     print("✅ EXE 파일 생성 완료!")
     print("=" * 70)
-    print(f"\n위치: {os.path.abspath('dist/일일결산자동화.exe')}")
+    print(f"\n위치: {os.path.join(dist_dir, '일일결산자동화.exe')}")
     print("\n배포 방법:")
-    print("  1. dist 폴더의 일일결산자동화.exe 복사")
-    print("  2. config.json을 같은 폴더에 복사")
-    print("  3. 더블클릭으로 실행")
+    print("  dist 폴더 전체를 복사하면 됩니다.")
+    print("  (일일결산자동화.exe + config.json)")
 except subprocess.CalledProcessError as e:
     print("\n❌ 빌드 실패")
     print(f"오류: {e}")
