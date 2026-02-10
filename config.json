@@ -1,0 +1,141 @@
+{
+  "template_file": "F:\\결산\\일일결산_템플릿.xlsx",
+  "output_pdf": "F:\\결산\\PDF\\일일결산_{date}.pdf",
+  "target_sheet": "복구됨_Sheet2",
+
+  "validation": {
+    "chart_number_min": 1,
+    "chart_number_max": 999999,
+    "allow_leading_zero": false,
+    "file_extensions": [".pdf", ".jpg", ".jpeg", ".png", ".bmp"]
+  },
+
+  "equipment": {
+    "SP": {
+      "name": "내피",
+      "path": "\\\\192.168.0.120\\sp",
+      "pattern": "(\\d+)_[LR]_",
+      "scan_type": "file",
+      "cell": {"row": 15, "col": 3},
+      "folder_structure": "YYYY\\MM\\MM.DD",
+      "comment": "날짜별 폴더. 예: 권영숙 206338_L_Center.jpg"
+    },
+    "TOPO": {
+      "name": "Tomey",
+      "path": "\\\\192.168.0.120\\topo",
+      "pattern": "\\s(\\d+)-\\d+",
+      "scan_type": "file",
+      "cell": {"row": 16, "col": 3},
+      "folder_structure": "YYYY\\MM\\TOPO MM.DD",
+      "comment": "날짜별 폴더. 예: 구민선 165774-16.bmp"
+    },
+    "ORB": {
+      "name": "ORB",
+      "path": "\\\\192.168.0.120\\orb",
+      "pattern": "\\s(\\d+)\\s+o[ds]-",
+      "scan_type": "file",
+      "cell": {"row": 14, "col": 3},
+      "folder_structure": "YYYY\\YYYY.MM\\ORB MM.DD",
+      "comment": "날짜별 폴더. 예: kim, seok hwan 115889 od-18.bmp"
+    },
+    "OCT": {
+      "name": "OCT",
+      "path": "\\\\192.168.0.120\\e\\Cirrus",
+      "pattern": "\\s(\\d+)-\\d+$",
+      "scan_type": "both",
+      "cell": {"row": 12, "col": 3},
+      "folder_structure": "YYYY\\MM\\MM.DD",
+      "comment": "날짜별 폴더 (폴더명). 예: hong, gil dong 192793-17"
+    },
+    "HFA": {
+      "name": "시야",
+      "path": "\\\\192.168.0.120\\hfa",
+      "pattern": "_(\\d{5,6})$|^(\\d{5,6})_",
+      "scan_type": "both",
+      "cell": {"row": 11, "col": 3},
+      "folder_structure": "YYYY\\MM\\MM.DD",
+      "comment": "폴더명: 56416_PARK_SU HO_19630605 / 파일명: PAR_20251119_163745_OD_83017128_SFA_56416"
+    },
+    "OQAS": {
+      "name": "백내장",
+      "path": "\\\\192.168.0.228\\oqass",
+      "pattern": "\\s(\\d+)\\s+o[ds]-",
+      "scan_type": "file",
+      "cell": {"row": 8, "col": 3},
+      "folder_structure": "YYYY\\MM\\MM.DD",
+      "comment": "날짜별 폴더. 예: im, heon chang 206343 od-18.jpeg"
+    }
+  },
+
+  "special_items": {
+    "녹내장": {
+      "type": "intersection",
+      "sources": ["HFA", "OCT"],
+      "cell": {"row": 9, "col": 3}
+    },
+    "안저": {
+      "folders": {
+        "fundus": {
+          "path": "\\\\AFC-210-PC\\Fundus2",
+          "pattern": "_(\\d+)_\\d{3}\\.",
+          "folder_structure": "YYYY\\MM\\MM.DD",
+          "comment": "예: 구정순 _148022_000.jpg, 구정순 _148022_001.jpg (한 검사당 4개 정도)"
+        },
+        "secondary": {
+          "path": "\\\\192.168.0.213\\images\\Secondary",
+          "pattern": "^(\\d+)-\\d{8}@",
+          "use_creation_time": false,
+          "comment": "예: 204775-20250919@161455-l4-s.jpg (파일명에 날짜 포함)"
+        }
+      },
+      "cell": {"row": 13, "col": 3}
+    }
+  },
+
+  "manual_input": {
+    "라식": {"row": 10, "col": 3},
+    "FAG": {"row": 18, "col": 3},
+    "안경검사": {"row": 17, "col": 3},
+    "OCTS": {"row": null, "col": null, "add_to": "OCT", "comment": "OCT 자동 집계 + OCTS 수기입력 = 최종 OCT"}
+  },
+
+  "combined_items": {
+    "OCT_TOTAL": {
+      "auto_source": "OCT",
+      "manual_source": "OCTS",
+      "target_cell": {"row": 12, "col": 3},
+      "comment": "OCT 자동 스캔 + OCTS 수기 입력 합산"
+    }
+  },
+
+  "staff_cell": {"row": 6, "col": 2},
+  "date_cell": {"row": 4, "col": 1},
+
+  "hospital_schedule_api": {
+    "url": "http://192.168.0.210:3001/api/employees",
+    "schedule_data_path": "\\\\OPTOS2\\Users\\USER-PC\\hospital-schedule-system\\data",
+    "enabled": true,
+    "department": "검사실",
+    "comment": "Hospital Schedule System API 연동 (검사실 직원 자동 로드)"
+  },
+
+  "staff_list": [
+    "김창범", "김수지", "김대혁", "김민지",
+    "박현진", "고은서", "김현호", "임량현",
+    "유예나", "김태호"
+  ],
+
+  "reservation": {
+    "search_keyword": "예약비고:",
+    "verion_keywords": ["toric"],
+    "lensx_keywords": ["panoptix", "lens x", "lensx", "mono+lensx"],
+    "lensx_plus_pattern": true,
+    "ex500_keywords": ["라식", "라섹", "lasik", "lasek", "올레이저"],
+    "cells": {
+      "verion": {"row": 19, "col": 3},
+      "lensx": {"row": 23, "col": 3},
+      "ex500": {"row": 22, "col": 3}
+    },
+    "comment": "LensX 카운팅 시 자동으로 Verion도 카운팅됨"
+  }
+}

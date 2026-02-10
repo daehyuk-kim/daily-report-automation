@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.pyo
+*.xlsx
+결산로그_*.txt
+*.exe
+dist/
+build/
+*.spec
