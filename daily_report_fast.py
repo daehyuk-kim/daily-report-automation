@@ -85,72 +85,69 @@ class DailyReportSystem:
             sys.exit(1)
 
     def get_staff_from_api(self, target_date: date, department: str = "검사실") -> List[str]:
-        """로컬 스케줄 JSON 파일에서 오늘 근무하는 검사실 직원 조회
+        """Schedule API에서 오늘 근무하는 검사실 직원 조회
 
-        스케줄 시스템 로직: 등록된 사람 = 휴가/OFF, 등록 안 된 사람 = 근무
-        → 전체 직원에서 휴가자를 제외하는 방식
+        1) /api/employees → 검사실 active 직원 전체
+        2) /api/schedule/{year}/{month} → 해당 월 스케줄
+        3) 오늘 휴무(h1, h2, 기타) 등록된 직원 제외
         """
         try:
             api_config = self.config.get('hospital_schedule_api', {})
+            base_url = api_config.get('url', 'https://schedule.seran-it.com').rstrip('/')
+            api_token = api_config.get('api_token', 'hospital2025secure')
             dept = api_config.get('department', department)
+            headers = {'x-api-token': api_token}
 
             # 1. API에서 검사실 전체 직원 목록 가져오기
-            api_url = api_config.get('url', 'http://192.168.0.210:3001/api/employees')
-            response = requests.get(api_url, timeout=5)
-
+            response = requests.get(f"{base_url}/api/employees", headers=headers, timeout=5)
             if response.status_code != 200:
                 return None
 
             all_employees = response.json()
-            all_staff = [
-                emp['name'] for emp in all_employees
+            exam_staff = [
+                emp for emp in all_employees
                 if emp.get('team') == dept and emp.get('status') == 'active'
+                and not emp.get('isRetired')
             ]
+            exam_ids = {emp['id']: emp['name'] for emp in exam_staff}
 
-            # 2. 스케줄 파일에서 오늘 휴가/OFF인 직원 찾기
-            # 네트워크 경로와 로컬 경로 모두 시도
-            schedule_paths = [
-                api_config.get('schedule_data_path', r"\\OPTOS2\Users\USER-PC\hospital-schedule-system\data"),
-                r"C:\Users\USER-PC\hospital-schedule-system\data"
-            ]
-
-            schedule_file = None
-            for schedule_dir in schedule_paths:
-                candidate = os.path.join(
-                    schedule_dir,
-                    f"schedule_{target_date.year}_{target_date.month:02d}.json"
-                )
-                if os.path.exists(candidate):
-                    schedule_file = candidate
-                    break
+            # 2. Schedule API에서 해당 월 스케줄 가져오기
+            year = target_date.strftime('%Y')
+            month = target_date.strftime('%m')
+            sr = requests.get(f"{base_url}/api/schedule/{year}/{month}", headers=headers, timeout=5)
 
             off_staff = set()
-            if schedule_file:
-                with open(schedule_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-
-                target_date_str = target_date.strftime('%Y-%m-%d')
-                schedule_entries = data.get('schedule', {})
+            if sr.status_code == 200:
+                sdata = sr.json()
+                schedule_entries = sdata.get('schedule', {})
+                target_day = str(target_date.day)
 
                 for key, entry in schedule_entries.items():
-                    employee = entry.get('employee', {})
-                    schedule = entry.get('schedule', {})
+                    # key format: emp_{id}_{day} (day = 1~31)
+                    parts = key.split('_')
+                    if len(parts) < 3:
+                        continue
+                    try:
+                        emp_id = int(parts[1])
+                    except (ValueError, IndexError):
+                        continue
+                    day = parts[2]
 
-                    # 검사실 팀 + 오늘 날짜 + 휴가/OFF/기타 상태 제외 (h1, h2, 기타)
-                    # h3 반차는 일을 했으므로 포함
-                    schedule_value = schedule.get('value', '')
-                    if (employee.get('team') == dept and
-                        schedule.get('date') == target_date_str and
-                        (schedule_value in ('h1', 'h2') or schedule_value.startswith('기타'))):
-                        off_staff.add(employee.get('name'))
+                    if day == target_day and emp_id in exam_ids:
+                        sch = entry.get('schedule', entry) if isinstance(entry, dict) else {}
+                        sch_value = sch.get('value', '') if isinstance(sch, dict) else ''
+                        # h1=연차, h2=휴가 → 제외
+                        # h3=반차(오후)는 오전 근무했으므로 포함
+                        if sch_value in ('h1', 'h2') or str(sch_value).startswith('기타'):
+                            off_staff.add(exam_ids[emp_id])
 
             # 3. 전체 직원에서 휴가자 제외
-            working_staff = [name for name in all_staff if name not in off_staff]
+            all_names = [emp['name'] for emp in exam_staff]
+            working_staff = [name for name in all_names if name not in off_staff]
 
-            return working_staff if working_staff else None
+            return (all_names, working_staff) if all_names else None
 
         except Exception as e:
-            # 오류 시 None 반환 (config의 staff_list 사용)
             return None
 
     def is_valid_chart_number(self, chart_num_str: str) -> bool:
@@ -1065,29 +1062,28 @@ class DailyReportGUI:
         # 날짜 변경 시 직원 목록도 새로고침
         self.refresh_staff_list()
 
-    def load_staff_list(self, staff_names: List[str] = None):
-        """직원 체크박스 생성 (자동 로드된 인원은 체크됨)"""
+    def load_staff_list(self, all_staff: List[str] = None, working_staff: List[str] = None):
+        """직원 체크박스 생성 (근무 인원은 체크, 휴무 인원은 체크 해제)"""
         # 기존 체크박스 제거
         for widget in self.staff_scrollable.winfo_children():
             widget.destroy()
 
-        # staff_names가 없으면 config에서 가져오기
-        if staff_names is None:
-            staff_names = self.system.config['staff_list']
+        # fallback: config에서 가져오기 (전원 체크)
+        if all_staff is None:
+            all_staff = self.system.config.get('staff_list', [])
+        if working_staff is None:
+            working_staff = all_staff
 
         # 현재 근무 인원 저장
-        self.current_staff = staff_names
+        self.current_staff = working_staff
 
         # 인원 수 표시
-        self.staff_count_label.config(text=f"{len(staff_names)}명")
-
-        # 전체 직원 목록 (config에서)
-        all_staff = self.system.config.get('staff_list', [])
+        self.staff_count_label.config(text=f"{len(working_staff)}명")
 
         # 체크박스 생성 (2열로 배치)
         self.staff_vars = {}
         for i, staff_name in enumerate(all_staff):
-            var = tk.BooleanVar(value=(staff_name in staff_names))
+            var = tk.BooleanVar(value=(staff_name in working_staff))
             self.staff_vars[staff_name] = var
             cb = ttk.Checkbutton(self.staff_scrollable, text=staff_name, variable=var,
                                 command=self.update_staff_count)
@@ -1099,7 +1095,7 @@ class DailyReportGUI:
         self.staff_count_label.config(text=f"{count}명")
 
     def refresh_staff_list(self):
-        """Hospital Schedule API에서 직원 목록 자동 로드"""
+        """Schedule API에서 직원 목록 자동 로드 (휴무자 제외)"""
         try:
             # 날짜 파싱
             date_str = self.date_entry.get()
@@ -1111,15 +1107,17 @@ class DailyReportGUI:
                 return
 
             # API에서 직원 목록 가져오기
-            api_staff = self.system.get_staff_from_api(target_date, "검사실")
+            result = self.system.get_staff_from_api(target_date, "검사실")
 
-            if api_staff:
-                # API 성공 - 자동 로드
-                self.load_staff_list(api_staff)
-                self.api_status_label.config(
-                    text="✓ API 자동 로드",
-                    foreground="green"
-                )
+            if result:
+                all_staff, working_staff = result
+                off_count = len(all_staff) - len(working_staff)
+                self.load_staff_list(all_staff, working_staff)
+                status = f"✓ API ({len(working_staff)}/{len(all_staff)}명"
+                if off_count > 0:
+                    status += f", 휴무 {off_count}명"
+                status += ")"
+                self.api_status_label.config(text=status, foreground="green")
             else:
                 # API 실패 → config 전체 사용
                 self.load_staff_list()

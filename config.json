@@ -112,17 +112,17 @@
   "date_cell": {"row": 4, "col": 1},
 
   "hospital_schedule_api": {
-    "url": "http://192.168.0.210:3001/api/employees",
-    "schedule_data_path": "\\\\OPTOS2\\Users\\USER-PC\\hospital-schedule-system\\data",
+    "url": "https://schedule.seran-it.com",
+    "api_token": "hospital2025secure",
     "enabled": true,
     "department": "검사실",
-    "comment": "Hospital Schedule System API 연동 (검사실 직원 자동 로드)"
+    "comment": "Schedule API에서 검사실 직원 자동 로드 + 휴무자 제외"
   },
 
   "staff_list": [
     "김창범", "김수지", "김대혁", "김민지",
     "박현진", "고은서", "김현호", "임량현",
-    "유예나", "김태호"
+    "유예나", "김태호", "김수민"
   ],
 
   "reservation": {
