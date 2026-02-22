@@ -58,10 +58,33 @@ else:
     HAS_WIN32 = False
 
 
+def get_config_path() -> str:
+    """config.json 경로 결정: exe 옆 외부 파일 우선, 없으면 번들 리소스 사용"""
+    # 1. exe/스크립트 옆에 config.json이 있으면 우선 사용
+    if getattr(sys, 'frozen', False):
+        exe_dir = os.path.dirname(sys.executable)
+    else:
+        exe_dir = os.path.dirname(os.path.abspath(__file__))
+    external = os.path.join(exe_dir, 'config.json')
+    if os.path.exists(external):
+        return external
+
+    # 2. PyInstaller 번들 리소스
+    if getattr(sys, 'frozen', False):
+        bundled = os.path.join(sys._MEIPASS, 'config.json')
+        if os.path.exists(bundled):
+            return bundled
+
+    return external  # fallback (FileNotFoundError will be raised later)
+
+
 class DailyReportSystem:
     """일일결산 시스템의 메인 클래스 (최적화 버전)"""
 
-    def __init__(self, config_path: str = "config.json"):
+    def __init__(self, config_path: str = None):
+        if config_path is None:
+            config_path = get_config_path()
+        self.config_path = config_path
         self.config = self.load_config(config_path)
         self.chart_numbers = {}
         self.results = {}
@@ -1605,8 +1628,12 @@ class DailyReportGUI:
                         _, folder_id, _ = key.split('.')
                         self.system.config['special_items']['안저']['folders'][folder_id]['path'] = entry.get()
 
-                # config.json 저장
-                with open("config.json", 'w', encoding='utf-8') as f:
+                # config.json 저장 (exe 옆에 외부 파일로)
+                if getattr(sys, 'frozen', False):
+                    save_path = os.path.join(os.path.dirname(sys.executable), 'config.json')
+                else:
+                    save_path = self.system.config_path
+                with open(save_path, 'w', encoding='utf-8') as f:
                     json.dump(self.system.config, f, indent=2, ensure_ascii=False)
 
                 messagebox.showinfo("성공", "설정이 저장되었습니다.")
@@ -1638,8 +1665,10 @@ class DailyReportGUI:
     def reload_config(self):
         """설정 다시 로드"""
         try:
-            with open("config.json", 'r', encoding='utf-8') as f:
+            config_path = get_config_path()
+            with open(config_path, 'r', encoding='utf-8') as f:
                 self.system.config = json.load(f)
+            self.system.config_path = config_path
             messagebox.showinfo("성공", "설정을 다시 로드했습니다.")
         except Exception as e:
             messagebox.showerror("오류", f"설정 로드 중 오류 발생:\n{str(e)}")
@@ -1665,9 +1694,9 @@ PDF 보고서를 생성하는 프로그램입니다.
 
 def main():
     """메인 함수"""
-    config_path = "config.json"
+    config_path = get_config_path()
     if not os.path.exists(config_path):
-        messagebox.showerror("오류", "config.json 파일을 찾을 수 없습니다.")
+        messagebox.showerror("오류", "config.json 파일을 찾을 수 없습니다.\nexe 옆에 config.json을 두거나 번들에 포함되어 있어야 합니다.")
         sys.exit(1)
 
     system = DailyReportSystem(config_path)

@@ -35,6 +35,7 @@ options = [
     "--onefile",
     "--windowed",
     "--icon=NONE",
+    "--add-data=config.json;.",
     "--hidden-import=openpyxl",
     "--hidden-import=pandas",
     "--hidden-import=xlrd",
@@ -52,22 +53,15 @@ print()
 try:
     subprocess.check_call(["pyinstaller"] + options)
 
-    # 배포 폴더 구성: dist에 config.json 복사
-    import shutil
     dist_dir = os.path.abspath("dist")
-    config_src = os.path.join(os.path.dirname(__file__), "config.json")
-    config_dst = os.path.join(dist_dir, "config.json")
-    if os.path.exists(config_src):
-        shutil.copy2(config_src, config_dst)
-        print(f"✅ config.json → dist/ 복사 완료")
 
     print("\n" + "=" * 70)
-    print("✅ EXE 파일 생성 완료!")
+    print("✅ EXE 파일 생성 완료! (config.json 내장)")
     print("=" * 70)
     print(f"\n위치: {os.path.join(dist_dir, '일일결산자동화.exe')}")
     print("\n배포 방법:")
-    print("  dist 폴더 전체를 복사하면 됩니다.")
-    print("  (일일결산자동화.exe + config.json)")
+    print("  일일결산자동화.exe 하나만 복사하면 됩니다.")
+    print("  (설정 변경 필요 시 exe 옆에 config.json을 두면 우선 적용)")
 except subprocess.CalledProcessError as e:
     print("\n❌ 빌드 실패")
     print(f"오류: {e}")
