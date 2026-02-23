@@ -42,6 +42,7 @@ options = [
     "--hidden-import=requests",
     "--hidden-import=win32com.client",
     "--hidden-import=pythoncom",
+    "--hidden-import=pyodbc",
     "--hidden-import=file_cache_manager",
     "--clean",
 ]

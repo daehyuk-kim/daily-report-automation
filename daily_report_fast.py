@@ -18,6 +18,12 @@ import tkinter as tk
 from tkinter import ttk, filedialog, scrolledtext, messagebox
 
 try:
+    import pyodbc
+    HAS_PYODBC = True
+except ImportError:
+    HAS_PYODBC = False
+
+try:
     import openpyxl
     from openpyxl import load_workbook
 except ImportError:
@@ -732,6 +738,60 @@ class DailyReportSystem:
 
         return counts
 
+    def get_reservation_from_db(self, target_date: date, log_callback) -> Optional[Dict[str, int]]:
+        """EMR DB(softcrm)에서 수술 예약 자동 조회 → Verion/LensX/EX500 카운트"""
+        if not HAS_PYODBC:
+            log_callback("  ⚠️  pyodbc 미설치 (DB 조회 불가)")
+            return None
+
+        db_config = self.config.get('emr_db', {})
+        if not db_config.get('enabled', False):
+            return None
+
+        try:
+            drivers = [d for d in pyodbc.drivers() if 'SQL Server' in d]
+            driver = drivers[-1] if drivers else 'SQL Server'
+
+            conn_str = (
+                f"DRIVER={{{driver}}};"
+                f"SERVER={db_config['server']};"
+                f"UID={db_config['uid']};"
+                f"PWD={db_config['pwd']};"
+                f"DATABASE={db_config['database']}"
+            )
+            conn = pyodbc.connect(conn_str, timeout=5)
+            cursor = conn.cursor()
+
+            date_str = target_date.strftime('%Y-%m-%d')
+            cursor.execute("""
+                SELECT OPERATIONR, OPERATIONL, COMMENT
+                FROM RESERVATION
+                WHERE RESERVE_DATE = ?
+                  AND RESERVE_STATE != '2'
+                  AND (ISNULL(OPERATIONR,'') != '' OR ISNULL(OPERATIONL,'') != '')
+            """, date_str)
+
+            reservation = self.config['reservation']
+            counts = {'verion': 0, 'lensx': 0, 'ex500': 0}
+
+            for row in cursor.fetchall():
+                opr = (row.OPERATIONR or '').strip()
+                opl = (row.OPERATIONL or '').strip()
+                comment = (row.COMMENT or '').strip()
+                combined = f"{opr} {opl} {comment}"
+
+                flags = self._check_reservation_keywords(combined)
+                for key in counts:
+                    if flags[key]:
+                        counts[key] += 1
+
+            conn.close()
+            return counts
+
+        except Exception as e:
+            log_callback(f"  ⚠️  DB 조회 오류: {str(e)}")
+            return None
+
     def write_excel(self, output_path: str, staff_selected: List[str],
                    result_values: Dict[str, int], log_callback) -> bool:
         """엑셀 파일 작성 (result_values: 모든 항목의 확정된 값)"""
@@ -1263,26 +1323,31 @@ class DailyReportGUI:
 
             self.log("")
 
-            # 3. 예약 파일 처리
+            # 3. 수술 예약 조회 (DB 자동 → 엑셀 파일 fallback)
             reservation_counts = {'verion': 0, 'lensx': 0, 'ex500': 0}
 
-            if self.reservation_files:
-                self.log(f"[3/3] 예약 파일 분석 중... ({len(self.reservation_files)}개 파일)")
+            self.log("[3/3] 수술 예약 조회 중...")
+            db_counts = self.system.get_reservation_from_db(target_date, self.log)
 
+            if db_counts is not None:
+                reservation_counts = db_counts
+                self.log(f"  ✓ EMR DB 자동 조회 완료")
+                self.log(f"  ✓ Verion: {reservation_counts['verion']}건")
+                self.log(f"  ✓ LensX: {reservation_counts['lensx']}건")
+                self.log(f"  ✓ EX500: {reservation_counts['ex500']}건")
+            elif self.reservation_files:
+                self.log(f"  DB 조회 실패 → 예약 파일 분석 ({len(self.reservation_files)}개)")
                 for file_path in self.reservation_files:
                     file_name = os.path.basename(file_path)
                     self.log(f"  📄 {file_name}")
-
                     file_counts = self.system.process_reservation_file(file_path, self.log)
-
                     for key in reservation_counts:
                         reservation_counts[key] += file_counts[key]
-
-                self.log(f"  ✓ Verion (예약): {reservation_counts['verion']}건")
-                self.log(f"  ✓ Lensx: {reservation_counts['lensx']}건")
+                self.log(f"  ✓ Verion: {reservation_counts['verion']}건")
+                self.log(f"  ✓ LensX: {reservation_counts['lensx']}건")
                 self.log(f"  ✓ EX500: {reservation_counts['ex500']}건")
             else:
-                self.log("[3/3] 예약 파일 선택 안 함 (건너뜀)")
+                self.log("  ⚠️  DB 연결 실패, 예약 파일도 없음 (건너뜀)")
 
             self.log("")
 

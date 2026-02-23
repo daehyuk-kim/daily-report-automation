@@ -125,6 +125,15 @@
     "유예나", "김태호", "김수민"
   ],
 
+  "emr_db": {
+    "server": "192.168.0.173",
+    "uid": "dhreadonly",
+    "pwd": "ckddnehd1*",
+    "database": "softcrm",
+    "enabled": true,
+    "comment": "EMR DB에서 수술 예약 자동 조회 (Verion/LensX/EX500)"
+  },
+
   "reservation": {
     "search_keyword": "예약비고:",
     "verion_keywords": ["toric"],
