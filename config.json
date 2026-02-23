@@ -58,7 +58,7 @@
     },
     "OQAS": {
       "name": "백내장",
-      "path": "\\\\192.168.0.228\\oqass",
+      "path": "\\\\192.168.0.120\\e\\oqas",
       "pattern": "\\s(\\d+)\\s+o[ds]-",
       "scan_type": "file",
       "cell": {"row": 8, "col": 3},
