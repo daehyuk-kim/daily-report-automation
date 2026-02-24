@@ -549,7 +549,7 @@ class DailyReportSystem:
         return chart_numbers
 
     def count_sightmap(self, log_callback) -> int:
-        """Sightmap(라식) 폴더에서 오늘 항목 수 카운트"""
+        """Sightmap(라식) 폴더에서 오늘 항목 수 카운트 (OQAS 환자 제외)"""
         sm_config = self.config.get('sightmap', {})
         if not sm_config:
             return 0
@@ -570,8 +570,26 @@ class DailyReportSystem:
                 return 0
 
             items = os.listdir(today_folder)
-            count = len(items)
-            log_callback(f"  ✓ Sightmap(라식): {count}건 ({today_folder})")
+            total = len(items)
+
+            # Extract chart numbers from sightmap items: "이름 차트번호-숫자"
+            oqas_charts = self.chart_numbers.get('OQAS', set())
+            pattern = re.compile(r'\s(\d+)-\d+$')
+            excluded = 0
+
+            if oqas_charts:
+                lasik_items = []
+                for item in items:
+                    match = pattern.search(item)
+                    if match and match.group(1) in oqas_charts:
+                        excluded += 1
+                    else:
+                        lasik_items.append(item)
+                count = len(lasik_items)
+            else:
+                count = total
+
+            log_callback(f"  ✓ Sightmap(라식): {count}건 (전체 {total}, OQAS 제외 {excluded})")
             return count
 
         except Exception as e:
