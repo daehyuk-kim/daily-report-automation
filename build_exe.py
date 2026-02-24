@@ -44,6 +44,8 @@ options = [
     "--hidden-import=pythoncom",
     "--hidden-import=pyodbc",
     "--hidden-import=file_cache_manager",
+    "--hidden-import=certifi",
+    "--collect-data=certifi",
     "--clean",
 ]
 

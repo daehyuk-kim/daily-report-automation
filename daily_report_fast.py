@@ -23,6 +23,16 @@ try:
 except ImportError:
     HAS_PYODBC = False
 
+# SSL certificate fix for PyInstaller bundled exe
+if getattr(sys, 'frozen', False):
+    try:
+        import certifi
+        os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
+        os.environ['SSL_CERT_FILE'] = certifi.where()
+    except (ImportError, Exception):
+        # certifi not available - will fall back to verify=False in API calls
+        pass
+
 try:
     import openpyxl
     from openpyxl import load_workbook
@@ -113,23 +123,48 @@ class DailyReportSystem:
             messagebox.showerror("오류", "설정 파일 형식이 올바르지 않습니다.")
             sys.exit(1)
 
-    def get_staff_from_api(self, target_date: date, department: str = "검사실") -> List[str]:
+    def get_staff_from_api(self, target_date: date, department: str = "검사실"):
         """Schedule API에서 오늘 근무하는 검사실 직원 조회
 
         1) /api/employees → 검사실 active 직원 전체
         2) /api/schedule/{year}/{month} → 해당 월 스케줄
         3) 오늘 휴무(h1, h2, 기타) 등록된 직원 제외
+
+        Returns: (all_names, working_staff) tuple or None
+        Sets self._last_api_error with error message on failure
         """
+        self._last_api_error = None
         try:
             api_config = self.config.get('hospital_schedule_api', {})
-            base_url = api_config.get('url', 'https://schedule.seran-it.com').rstrip('/')
+            if not api_config.get('enabled', True):
+                self._last_api_error = "API disabled in config"
+                return None
+
+            # Internal URL first (hospital LAN), then external as fallback
+            internal_url = api_config.get('internal_url', 'http://192.168.0.210:3001').rstrip('/')
+            external_url = api_config.get('url', 'https://schedule.seran-it.com').rstrip('/')
             api_token = api_config.get('api_token', 'hospital2025secure')
             dept = api_config.get('department', department)
             headers = {'x-api-token': api_token}
 
-            # 1. API에서 검사실 전체 직원 목록 가져오기
-            response = requests.get(f"{base_url}/api/employees", headers=headers, timeout=5)
+            # Try internal URL first, then external
+            base_url = None
+            response = None
+            for try_url in [internal_url, external_url]:
+                try:
+                    response = requests.get(f"{try_url}/api/employees", headers=headers, timeout=3)
+                    if response.status_code == 200:
+                        base_url = try_url
+                        break
+                except Exception:
+                    continue
+
+            if base_url is None or response is None or response.status_code != 200:
+                self._last_api_error = "내부/외부 URL 모두 연결 불가"
+                return None
+
             if response.status_code != 200:
+                self._last_api_error = f"HTTP {response.status_code}"
                 return None
 
             all_employees = response.json()
@@ -143,7 +178,8 @@ class DailyReportSystem:
             # 2. Schedule API에서 해당 월 스케줄 가져오기
             year = target_date.strftime('%Y')
             month = target_date.strftime('%m')
-            sr = requests.get(f"{base_url}/api/schedule/{year}/{month}", headers=headers, timeout=5)
+            sr = requests.get(f"{base_url}/api/schedule/{year}/{month}",
+                            headers=headers, timeout=5)
 
             off_staff = set()
             if sr.status_code == 200:
@@ -176,7 +212,14 @@ class DailyReportSystem:
 
             return (all_names, working_staff) if all_names else None
 
+        except requests.exceptions.ConnectionError as e:
+            self._last_api_error = f"연결 불가 ({base_url})"
+            return None
+        except requests.exceptions.Timeout:
+            self._last_api_error = "타임아웃 (5초)"
+            return None
         except Exception as e:
+            self._last_api_error = str(e)[:80]
             return None
 
     def is_valid_chart_number(self, chart_num_str: str) -> bool:
@@ -505,6 +548,36 @@ class DailyReportSystem:
 
         return chart_numbers
 
+    def count_sightmap(self, log_callback) -> int:
+        """Sightmap(라식) 폴더에서 오늘 항목 수 카운트"""
+        sm_config = self.config.get('sightmap', {})
+        if not sm_config:
+            return 0
+
+        base_path = sm_config['path']
+        folder_structure = sm_config.get('folder_structure', '')
+
+        if not os.path.exists(base_path):
+            log_callback(f"  ⚠️  경로 없음: {base_path}")
+            return 0
+
+        try:
+            folder = self._resolve_date_folder(folder_structure)
+            today_folder = os.path.join(base_path, folder)
+
+            if not os.path.exists(today_folder):
+                log_callback(f"  ⚠️  오늘 폴더 없음: {today_folder}")
+                return 0
+
+            items = os.listdir(today_folder)
+            count = len(items)
+            log_callback(f"  ✓ Sightmap(라식): {count}건 ({today_folder})")
+            return count
+
+        except Exception as e:
+            log_callback(f"  ❌ Sightmap 오류: {str(e)}")
+            return 0
+
     def calculate_glaucoma(self, log_callback) -> int:
         """녹내장 계산 (HFA ∩ OCT)"""
         try:
@@ -750,7 +823,10 @@ class DailyReportSystem:
 
         try:
             drivers = [d for d in pyodbc.drivers() if 'SQL Server' in d]
-            driver = drivers[-1] if drivers else 'SQL Server'
+            if not drivers:
+                log_callback("  ⚠️  SQL Server ODBC 드라이버 없음 (설치 필요)")
+                return None
+            driver = drivers[-1]
 
             conn_str = (
                 f"DRIVER={{{driver}}};"
@@ -827,10 +903,11 @@ class DailyReportSystem:
             fundus_cell = self.config['special_items']['안저']['cell']
             ws.cell(fundus_cell['row'], fundus_cell['col']).value = result_values.get('FUNDUS', 0)
 
-            # 수기 입력 항목
-            lasik_cell = self.config['manual_input']['라식']
-            ws.cell(lasik_cell['row'], lasik_cell['col']).value = result_values.get('LASIK', 0)
+            # Sightmap(라식) 자동 스캔 항목
+            sightmap_cell = self.config['sightmap']['cell']
+            ws.cell(sightmap_cell['row'], sightmap_cell['col']).value = result_values.get('LASIK', 0)
 
+            # 수기 입력 항목
             fag_cell = self.config['manual_input']['FAG']
             ws.cell(fag_cell['row'], fag_cell['col']).value = result_values.get('FAG', 0)
 
@@ -914,7 +991,6 @@ class DailyReportGUI:
     def __init__(self, root: tk.Tk, system: DailyReportSystem):
         self.root = root
         self.system = system
-        self.reservation_files = []
         self.log_file_handle = None
         self.scan_results = {}
         self.setup_gui()
@@ -1036,60 +1112,40 @@ class DailyReportGUI:
         # 날짜 입력 필드에 Enter 키 바인딩
         self.date_entry.bind('<Return>', lambda e: self.refresh_staff_list())
 
-        # 2. 예약 파일 선택
+        # 2. 수기 입력 (FAG, 안경검사, OCTS만 남음)
         ttk.Separator(left_frame, orient='horizontal').grid(row=5, column=0, columnspan=2,
                                                              sticky=(tk.W, tk.E), pady=10)
 
-        reservation_label = ttk.Label(left_frame, text="📁 예약 파일", font=("", 12, "bold"))
-        reservation_label.grid(row=6, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
-
-        self.file_button = ttk.Button(left_frame, text="파일 선택...", command=self.select_files)
-        self.file_button.grid(row=7, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 5))
-
-        self.file_label = ttk.Label(left_frame, text="선택된 파일: 없음", foreground="gray")
-        self.file_label.grid(row=8, column=0, columnspan=2, sticky=tk.W)
-
-        # 3. 수기 입력
-        ttk.Separator(left_frame, orient='horizontal').grid(row=9, column=0, columnspan=2,
-                                                             sticky=(tk.W, tk.E), pady=10)
-
         manual_label = ttk.Label(left_frame, text="✍ 수기 입력", font=("", 12, "bold"))
-        manual_label.grid(row=10, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
-
-        lasik_label = ttk.Label(left_frame, text="라식:")
-        lasik_label.grid(row=11, column=0, sticky=tk.W, padx=(0, 5))
-
-        self.lasik_entry = ttk.Entry(left_frame, width=10)
-        self.lasik_entry.insert(0, "0")
-        self.lasik_entry.grid(row=11, column=1, sticky=tk.W, pady=3)
+        manual_label.grid(row=6, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
 
         fag_label = ttk.Label(left_frame, text="FAG:")
-        fag_label.grid(row=12, column=0, sticky=tk.W, padx=(0, 5))
+        fag_label.grid(row=7, column=0, sticky=tk.W, padx=(0, 5))
 
         self.fag_entry = ttk.Entry(left_frame, width=10)
         self.fag_entry.insert(0, "0")
-        self.fag_entry.grid(row=12, column=1, sticky=tk.W, pady=3)
+        self.fag_entry.grid(row=7, column=1, sticky=tk.W, pady=3)
 
         glasses_label = ttk.Label(left_frame, text="안경검사:")
-        glasses_label.grid(row=13, column=0, sticky=tk.W, padx=(0, 5))
+        glasses_label.grid(row=8, column=0, sticky=tk.W, padx=(0, 5))
 
         self.glasses_entry = ttk.Entry(left_frame, width=10)
         self.glasses_entry.insert(0, "0")
-        self.glasses_entry.grid(row=13, column=1, sticky=tk.W, pady=3)
+        self.glasses_entry.grid(row=8, column=1, sticky=tk.W, pady=3)
 
         octs_label = ttk.Label(left_frame, text="OCTS:")
-        octs_label.grid(row=14, column=0, sticky=tk.W, padx=(0, 5))
+        octs_label.grid(row=9, column=0, sticky=tk.W, padx=(0, 5))
 
         self.octs_entry = ttk.Entry(left_frame, width=10)
         self.octs_entry.insert(0, "0")
-        self.octs_entry.grid(row=14, column=1, sticky=tk.W, pady=3)
+        self.octs_entry.grid(row=9, column=1, sticky=tk.W, pady=3)
 
-        # 4. 스캔 버튼
-        ttk.Separator(left_frame, orient='horizontal').grid(row=15, column=0, columnspan=2,
+        # 3. 스캔 버튼
+        ttk.Separator(left_frame, orient='horizontal').grid(row=10, column=0, columnspan=2,
                                                              sticky=(tk.W, tk.E), pady=10)
 
         self.scan_button = ttk.Button(left_frame, text="🔍 스캔 시작", command=self.run_scan)
-        self.scan_button.grid(row=16, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=8)
+        self.scan_button.grid(row=11, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=8)
 
         # === 중간 영역 구성 (스캔 결과) ===
 
@@ -1202,16 +1258,17 @@ class DailyReportGUI:
                 status += ")"
                 self.api_status_label.config(text=status, foreground="green")
             else:
-                # API 실패 → config 전체 사용
+                # API 실패 → config 전체 사용 (실제 에러 표시)
                 self.load_staff_list()
+                error_detail = getattr(self.system, '_last_api_error', None) or '알 수 없는 오류'
                 self.api_status_label.config(
-                    text="⚠ API 연결 실패 (config 전체)",
+                    text=f"⚠ API 실패: {error_detail}",
                     foreground="orange"
                 )
         except Exception as e:
             # 예외 발생 → config 전체 사용
             self.load_staff_list()
-            self.api_status_label.config(text="⚠ API 오류 (config 전체)", foreground="red")
+            self.api_status_label.config(text=f"⚠ 오류: {str(e)[:50]}", foreground="red")
 
     def log(self, message: str):
         """로그 메시지 출력 (화면 + 파일) - 스레드 안전"""
@@ -1232,21 +1289,6 @@ class DailyReportGUI:
             except Exception as e:
                 print(f"로그 파일 쓰기 오류: {e}")
 
-    def select_files(self):
-        """예약 파일 선택"""
-        files = filedialog.askopenfilenames(
-            title="예약 파일 선택",
-            filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
-        )
-
-        if files:
-            self.reservation_files = list(files)
-            file_count = len(files)
-            self.file_label.config(text=f"선택된 파일: {file_count}개", foreground="blue")
-        else:
-            self.reservation_files = []
-            self.file_label.config(text="선택된 파일: 없음", foreground="gray")
-
     def get_selected_staff(self) -> List[str]:
         """체크된 직원 목록 반환"""
         return [name for name, var in self.staff_vars.items() if var.get()]
@@ -1254,7 +1296,6 @@ class DailyReportGUI:
     def run_scan(self):
         """1단계: 스캔 실행"""
         self.scan_button.config(state='disabled')
-        self.file_button.config(state='disabled')
 
         self.log_text.configure(state='normal')
         self.log_text.delete(1.0, tk.END)
@@ -1289,7 +1330,6 @@ class DailyReportGUI:
             except ValueError:
                 self.log("❌ 날짜 형식 오류! YYYY-MM-DD 형식으로 입력하세요.")
                 self.scan_button.config(state='normal')
-                self.file_button.config(state='normal')
                 return
 
             self.log("=" * 54)
@@ -1313,7 +1353,7 @@ class DailyReportGUI:
             self.log("")
 
             # 2. 특수 항목 계산
-            self.log("[2/3] 특수 항목 계산 중...")
+            self.log("[2/4] 특수 항목 계산 중...")
 
             glaucoma_count = self.system.calculate_glaucoma(self.log)
             self.log(f"  ✓ 녹내장 (HFA ∩ OCT): {glaucoma_count}건")
@@ -1323,10 +1363,16 @@ class DailyReportGUI:
 
             self.log("")
 
-            # 3. 수술 예약 조회 (DB 자동 → 엑셀 파일 fallback)
+            # 3. Sightmap(라식) 자동 카운트
+            self.log("[3/4] Sightmap(라식) 스캔 중...")
+            sightmap_count = self.system.count_sightmap(self.log)
+
+            self.log("")
+
+            # 4. 수술 예약 조회 (DB 자동 → 엑셀 파일 fallback)
             reservation_counts = {'verion': 0, 'lensx': 0, 'ex500': 0}
 
-            self.log("[3/3] 수술 예약 조회 중...")
+            self.log("[4/4] 수술 예약 조회 중...")
             db_counts = self.system.get_reservation_from_db(target_date, self.log)
 
             if db_counts is not None:
@@ -1335,19 +1381,8 @@ class DailyReportGUI:
                 self.log(f"  ✓ Verion: {reservation_counts['verion']}건")
                 self.log(f"  ✓ LensX: {reservation_counts['lensx']}건")
                 self.log(f"  ✓ EX500: {reservation_counts['ex500']}건")
-            elif self.reservation_files:
-                self.log(f"  DB 조회 실패 → 예약 파일 분석 ({len(self.reservation_files)}개)")
-                for file_path in self.reservation_files:
-                    file_name = os.path.basename(file_path)
-                    self.log(f"  📄 {file_name}")
-                    file_counts = self.system.process_reservation_file(file_path, self.log)
-                    for key in reservation_counts:
-                        reservation_counts[key] += file_counts[key]
-                self.log(f"  ✓ Verion: {reservation_counts['verion']}건")
-                self.log(f"  ✓ LensX: {reservation_counts['lensx']}건")
-                self.log(f"  ✓ EX500: {reservation_counts['ex500']}건")
             else:
-                self.log("  ⚠️  DB 연결 실패, 예약 파일도 없음 (건너뜀)")
+                self.log("  ⚠️  DB 연결 실패 (결과 화면에서 수동 입력 가능)")
 
             self.log("")
 
@@ -1355,6 +1390,7 @@ class DailyReportGUI:
             self.scan_results = {
                 'glaucoma_count': glaucoma_count,
                 'fundus_count': fundus_count,
+                'sightmap_count': sightmap_count,
                 'reservation_counts': reservation_counts
             }
 
@@ -1372,8 +1408,7 @@ class DailyReportGUI:
             self.log(f"❌ 오류 발생: {str(e)}")
             self.log("=" * 54)
             self.scan_button.config(state='normal')
-            self.file_button.config(state='normal')
-
+    
         finally:
             # 로그 파일 닫기
             if self.log_file_handle:
@@ -1395,7 +1430,7 @@ class DailyReportGUI:
             'TOPO': len(self.system.chart_numbers.get('TOPO', set())),
             'GLAUCOMA': self.scan_results['glaucoma_count'],
             'FUNDUS': self.scan_results['fundus_count'],
-            'LASIK': int(self.lasik_entry.get() or 0),
+            'LASIK': self.scan_results['sightmap_count'],
             'GLASSES': int(self.glasses_entry.get() or 0),
             'FAG': int(self.fag_entry.get() or 0),
             'VERION': self.scan_results['reservation_counts']['verion'],
@@ -1413,7 +1448,6 @@ class DailyReportGUI:
         # PDF 출력 버튼 활성화
         self.output_button.config(state='normal')
         self.scan_button.config(state='normal')
-        self.file_button.config(state='normal')
 
     def process_output(self):
         """2단계: PDF 출력 - Entry 위젯의 값을 읽어서 엑셀/PDF 생성"""

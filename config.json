@@ -92,8 +92,15 @@
     }
   },
 
+  "sightmap": {
+    "name": "라식",
+    "path": "\\\\192.168.0.120\\sightmap",
+    "folder_structure": "YYYY\\MM\\MM.DD",
+    "cell": {"row": 10, "col": 3},
+    "comment": "날짜별 폴더 안의 항목 수 = 라식 건수"
+  },
+
   "manual_input": {
-    "라식": {"row": 10, "col": 3},
     "FAG": {"row": 18, "col": 3},
     "안경검사": {"row": 17, "col": 3},
     "OCTS": {"row": null, "col": null, "add_to": "OCT", "comment": "OCT 자동 집계 + OCTS 수기입력 = 최종 OCT"}
@@ -112,11 +119,12 @@
   "date_cell": {"row": 4, "col": 1},
 
   "hospital_schedule_api": {
+    "internal_url": "http://192.168.0.210:3001",
     "url": "https://schedule.seran-it.com",
     "api_token": "hospital2025secure",
     "enabled": true,
     "department": "검사실",
-    "comment": "Schedule API에서 검사실 직원 자동 로드 + 휴무자 제외"
+    "comment": "내부망 우선 시도 → 외부 URL 폴백"
   },
 
   "staff_list": [
