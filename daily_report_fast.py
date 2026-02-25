@@ -1014,7 +1014,6 @@ class DailyReportGUI:
     def __init__(self, root: tk.Tk, system: DailyReportSystem):
         self.root = root
         self.system = system
-        self.log_file_handle = None
         self.scan_results = {}
         self.setup_gui()
 
@@ -1304,14 +1303,6 @@ class DailyReportGUI:
         # 백그라운드 스레드에서도 안전하게 UI 업데이트
         self.root.after(0, _update_ui)
 
-        # 로그 파일에도 기록
-        if self.log_file_handle:
-            try:
-                self.log_file_handle.write(message + '\n')
-                self.log_file_handle.flush()
-            except Exception as e:
-                print(f"로그 파일 쓰기 오류: {e}")
-
     def get_selected_staff(self) -> List[str]:
         """체크된 직원 목록 반환"""
         return [name for name, var in self.staff_vars.items() if var.get()]
@@ -1336,13 +1327,6 @@ class DailyReportGUI:
 
     def process_scan(self):
         """1단계: 스캔 처리 - 결과를 화면에 표시"""
-        # 로그 파일 열기
-        log_filename = f"결산로그_{date.today().strftime('%Y-%m-%d')}.txt"
-        try:
-            self.log_file_handle = open(log_filename, 'w', encoding='utf-8')
-        except Exception as e:
-            print(f"로그 파일 생성 오류: {e}")
-            self.log_file_handle = None
 
         try:
             # 날짜 파싱
@@ -1358,7 +1342,6 @@ class DailyReportGUI:
             self.log("=" * 54)
             self.log(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 스캔 시작")
             self.log(f"결산 날짜: {target_date.strftime('%Y-%m-%d')}")
-            self.log(f"로그 파일: {log_filename}")
             self.log("=" * 54)
             self.log("")
 
@@ -1432,15 +1415,6 @@ class DailyReportGUI:
             self.log("=" * 54)
             self.scan_button.config(state='normal')
     
-        finally:
-            # 로그 파일 닫기
-            if self.log_file_handle:
-                try:
-                    self.log_file_handle.close()
-                    self.log_file_handle = None
-                except Exception as e:
-                    print(f"로그 파일 닫기 오류: {e}")
-
     def update_result_entries(self):
         """스캔 결과를 Entry 위젯에 표시하고 편집 가능하게 설정"""
         # 각 항목의 값 설정
@@ -1474,13 +1448,6 @@ class DailyReportGUI:
 
     def process_output(self):
         """2단계: PDF 출력 - Entry 위젯의 값을 읽어서 엑셀/PDF 생성"""
-        # 로그 파일 열기
-        log_filename = f"결산로그_{date.today().strftime('%Y-%m-%d')}.txt"
-        try:
-            self.log_file_handle = open(log_filename, 'a', encoding='utf-8')  # append 모드
-        except Exception as e:
-            print(f"로그 파일 열기 오류: {e}")
-            self.log_file_handle = None
 
         try:
             self.log("")
@@ -1561,14 +1528,6 @@ class DailyReportGUI:
             self.log("=" * 54)
 
         finally:
-            # 로그 파일 닫기
-            if self.log_file_handle:
-                try:
-                    self.log_file_handle.close()
-                    self.log_file_handle = None
-                except Exception as e:
-                    print(f"로그 파일 닫기 오류: {e}")
-
             self.output_button.config(state='normal')
 
     def open_settings(self):
