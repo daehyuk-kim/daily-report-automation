@@ -837,21 +837,25 @@ class DailyReportSystem:
 
         db_config = self.config.get('emr_db', {})
         if not db_config.get('enabled', False):
+            log_callback("  ⚠️  EMR DB 설정 없음 또는 비활성화")
             return None
 
         try:
             drivers = [d for d in pyodbc.drivers() if 'SQL Server' in d]
+            log_callback(f"  📋 ODBC 드라이버: {drivers if drivers else '없음'}")
             if not drivers:
                 log_callback("  ⚠️  SQL Server ODBC 드라이버 없음 (설치 필요)")
                 return None
             driver = drivers[-1]
 
+            log_callback(f"  🔗 DB 연결 시도: {db_config['server']} ({driver})")
             conn_str = (
                 f"DRIVER={{{driver}}};"
                 f"SERVER={db_config['server']};"
                 f"UID={db_config['uid']};"
                 f"PWD={db_config['pwd']};"
-                f"DATABASE={db_config['database']}"
+                f"DATABASE={db_config['database']};"
+                f"TrustServerCertificate=yes"
             )
             conn = pyodbc.connect(conn_str, timeout=5)
             cursor = conn.cursor()
@@ -922,7 +926,8 @@ class DailyReportSystem:
             ws.cell(fundus_cell['row'], fundus_cell['col']).value = result_values.get('FUNDUS', 0)
 
             # Sightmap(라식) 자동 스캔 항목
-            sightmap_cell = self.config['sightmap']['cell']
+            sm_config = self.config.get('sightmap', {})
+            sightmap_cell = sm_config.get('cell', {'row': 10, 'col': 3})
             ws.cell(sightmap_cell['row'], sightmap_cell['col']).value = result_values.get('LASIK', 0)
 
             # 수기 입력 항목
