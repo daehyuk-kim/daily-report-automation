@@ -1,6 +1,7 @@
 {
-  "template_file": "F:\\결산\\일일결산_템플릿.xlsx",
-  "output_pdf": "F:\\결산\\PDF\\일일결산_{date}.pdf",
+  "template_file": "일일결산_템플릿.xlsx",
+  "output_pdf": "PDF\\일일결산_{date}.pdf",
+  "_path_comment": "상대경로 시 exe 위치 기준. 절대경로도 가능 (예: F:\\결산\\PDF\\...)",
   "target_sheet": "복구됨_Sheet2",
 
   "validation": {
@@ -99,6 +100,15 @@
     "cell": {"row": 10, "col": 3},
     "comment": "날짜별 폴더 안의 항목 수 = 라식 건수"
   },
+
+  "auto_organize": [
+    {"name": "내피", "path": "\\\\192.168.0.120\\sp", "folder_structure": "YYYY\\MM\\MM.DD"},
+    {"name": "시야", "path": "\\\\192.168.0.120\\hfa", "folder_structure": "YYYY\\MM\\MM.DD"},
+    {"name": "라식", "path": "\\\\192.168.0.120\\sightmap", "folder_structure": "YYYY\\MM\\MM.DD"},
+    {"name": "IOL700", "path": "\\\\192.168.0.120\\iol700", "folder_structure": "YYYY\\MM\\MM.DD"},
+    {"name": "Optos", "path": "\\\\192.168.0.210\\optos", "folder_structure": "YYYY\\MM\\MM.DD"}
+  ],
+  "auto_organize_comment": "topo, orb, oqas, oct는 수동 정리 → 제외",
 
   "manual_input": {
     "FAG": {"row": 18, "col": 3},

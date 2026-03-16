@@ -9,6 +9,8 @@ import os
 import sys
 import json
 import re
+import time
+import shutil
 import threading
 import requests
 from datetime import datetime, date, timedelta
@@ -74,24 +76,58 @@ else:
     HAS_WIN32 = False
 
 
+def get_exe_dir() -> str:
+    """exe 또는 스크립트의 실행 디렉토리 반환"""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def get_bundled_path(filename: str) -> Optional[str]:
+    """PyInstaller 번들 내장 리소스 경로 반환"""
+    if getattr(sys, 'frozen', False):
+        bundled = os.path.join(sys._MEIPASS, filename)
+        if os.path.exists(bundled):
+            return bundled
+    return None
+
+
 def get_config_path() -> str:
     """config.json 경로 결정: exe 옆 외부 파일 우선, 없으면 번들 리소스 사용"""
-    # 1. exe/스크립트 옆에 config.json이 있으면 우선 사용
-    if getattr(sys, 'frozen', False):
-        exe_dir = os.path.dirname(sys.executable)
-    else:
-        exe_dir = os.path.dirname(os.path.abspath(__file__))
-    external = os.path.join(exe_dir, 'config.json')
+    external = os.path.join(get_exe_dir(), 'config.json')
     if os.path.exists(external):
         return external
 
-    # 2. PyInstaller 번들 리소스
-    if getattr(sys, 'frozen', False):
-        bundled = os.path.join(sys._MEIPASS, 'config.json')
-        if os.path.exists(bundled):
-            return bundled
+    bundled = get_bundled_path('config.json')
+    if bundled:
+        return bundled
 
     return external  # fallback (FileNotFoundError will be raised later)
+
+
+def get_template_path(config_path: str) -> str:
+    """템플릿 xlsx 경로 결정: config 경로 → exe 옆 → 번들 리소스 순"""
+    # 1. config에 지정된 경로가 존재하면 사용
+    if config_path and os.path.exists(config_path):
+        return config_path
+
+    # 2. exe 옆에 템플릿 파일
+    template_name = '일일결산_템플릿.xlsx'
+    external = os.path.join(get_exe_dir(), template_name)
+    if os.path.exists(external):
+        return external
+
+    # 3. exe 상위 디렉토리 (결산 폴더 안에 exe를 둔 경우)
+    parent = os.path.join(get_exe_dir(), '..', template_name)
+    if os.path.exists(parent):
+        return os.path.abspath(parent)
+
+    # 4. PyInstaller 번들 리소스
+    bundled = get_bundled_path(template_name)
+    if bundled:
+        return bundled
+
+    return config_path or external  # fallback
 
 
 class DailyReportSystem:
@@ -201,9 +237,8 @@ class DailyReportSystem:
                     if day == target_day and emp_id in exam_ids:
                         sch = entry.get('schedule', entry) if isinstance(entry, dict) else {}
                         sch_value = sch.get('value', '') if isinstance(sch, dict) else ''
-                        # h1=연차, h2=휴가 → 제외
-                        # h3=반차(오후)는 오전 근무했으므로 포함
-                        if sch_value in ('h1', 'h2') or str(sch_value).startswith('기타'):
+                        # h로 시작하는 코드 모두 제외 (h1=연차, h2=휴가, h3=반차, h4=병가, h5=의료휴무, h6=기타)
+                        if str(sch_value).startswith('h') or str(sch_value).startswith('기타'):
                             off_staff.add(exam_ids[emp_id])
 
             # 3. 전체 직원에서 휴가자 제외
@@ -474,17 +509,32 @@ class DailyReportSystem:
             total_dirs_count = 0
 
 
-            # scan_type == 'both'이고 날짜 폴더 없을 때: 최상위 폴더+파일 전체 스캔
+            # scan_type == 'both'이고 날짜 폴더 없을 때: 최상위 폴더+파일 스캔 (오늘 것만)
             if scan_type == 'both' and is_realtime_scan:
-                log_callback(f"     🔍 최상위 폴더+파일 스캔 (정리 전)")
+                log_callback(f"     🔍 최상위 폴더+파일 스캔 (정리 전, 오늘 mtime만)")
 
                 valid_extensions = self.config['validation']['file_extensions']
                 total_files_count = 0
+                today_str = self.today.strftime('%Y%m%d')
+                skipped_old = 0
 
                 try:
                     items = os.listdir(today_folder)
                     for item in items:
                         item_path = os.path.join(today_folder, item)
+
+                        # skip year/date folders
+                        if os.path.isdir(item_path) and re.match(r'^(20\d{2}|\d{2}\.\d{2})$', item):
+                            continue
+
+                        # mtime filter: only today's items
+                        try:
+                            mtime = os.path.getmtime(item_path)
+                            if time.strftime('%Y%m%d', time.localtime(mtime)) != today_str:
+                                skipped_old += 1
+                                continue
+                        except OSError:
+                            continue
 
                         if os.path.isdir(item_path):
                             total_dirs_count += 1
@@ -503,7 +553,7 @@ class DailyReportSystem:
                                     if self.is_valid_chart_number(chart_num):
                                         chart_numbers.add(chart_num)
 
-                    log_callback(f"     📊 폴더: {total_dirs_count}개 / 파일: {total_files_count}개 / 매칭: {len(chart_numbers)}건")
+                    log_callback(f"     📊 폴더: {total_dirs_count}개 / 파일: {total_files_count}개 / 매칭: {len(chart_numbers)}건 (과거 {skipped_old}개 스킵)")
                 except Exception as e:
                     log_callback(f"     ❌ 스캔 오류: {e}")
 
@@ -548,8 +598,65 @@ class DailyReportSystem:
 
         return chart_numbers
 
+    def organize_directory(self, base_path, folder_structure, log_callback) -> int:
+        """daehyuk.py 로직: 루트의 flat 항목을 날짜폴더로 정리 (배치 대체)"""
+        if not os.path.exists(base_path):
+            return 0
+
+        target_folder = self._resolve_date_folder(folder_structure)
+        target_path = os.path.join(base_path, target_folder)
+        today_str = self.today.strftime('%Y%m%d')
+        moved = 0
+
+        for item in os.listdir(base_path):
+            item_path = os.path.join(base_path, item)
+            # skip year/month folders, log files, Thumbs.db
+            if os.path.isdir(item_path) and re.match(r'^(20\d{2}|\d{2}\.\d{2})$', item):
+                continue
+            if item.startswith('Log') or item == 'Thumbs.db':
+                continue
+            # check modification date matches target date
+            try:
+                mtime = os.path.getmtime(item_path)
+                if time.strftime('%Y%m%d', time.localtime(mtime)) != today_str:
+                    continue
+            except OSError:
+                continue
+            # create target folder and move
+            if not os.path.exists(target_path):
+                os.makedirs(target_path, exist_ok=True)
+            try:
+                dest = os.path.join(target_path, item)
+                if os.path.exists(dest):
+                    log_callback(f"    ⚠️ 이미 존재: {item}")
+                    continue
+                shutil.move(item_path, target_path)
+                moved += 1
+            except Exception as e:
+                log_callback(f"    ❌ 이동 실패: {item} → {str(e)}")
+                continue
+
+        return moved
+
+    def organize_all_directories(self, log_callback):
+        """스캔 후 auto_organize 대상 디렉토리 자동 정리 (daehyuk.py 통합)"""
+        targets = []
+
+        for item in self.config.get('auto_organize', []):
+            if item.get('path') and item.get('folder_structure'):
+                targets.append((item['name'], item['path'], item['folder_structure']))
+
+        total_moved = 0
+        for name, path, fs in targets:
+            moved = self.organize_directory(path, fs, log_callback)
+            if moved > 0:
+                log_callback(f"  📁 {name}: {moved}건 정리 완료")
+                total_moved += moved
+
+        return total_moved
+
     def count_sightmap(self, log_callback) -> int:
-        """Sightmap(라식) 폴더에서 오늘 항목 수 카운트 (OQAS 환자 제외)"""
+        """라식검사 카운트: Sightmap 고유 차트 수 = 라식 건수"""
         sm_config = self.config.get('sightmap', {})
         if not sm_config:
             return 0
@@ -558,42 +665,54 @@ class DailyReportSystem:
         folder_structure = sm_config.get('folder_structure', '')
 
         if not os.path.exists(base_path):
-            log_callback(f"  ⚠️  경로 없음: {base_path}")
+            log_callback(f"  ⚠️  Sightmap 경로 없음: {base_path}")
             return 0
 
         try:
             folder = self._resolve_date_folder(folder_structure)
             today_folder = os.path.join(base_path, folder)
 
-            if not os.path.exists(today_folder):
-                log_callback(f"  ⚠️  오늘 폴더 없음: {today_folder}")
-                return 0
+            sm_pattern = re.compile(r'\s(\d+)-\d+')
+            sightmap_charts = set()
 
-            items = os.listdir(today_folder)
-            total = len(items)
-
-            # Extract chart numbers from sightmap items: "이름 차트번호-숫자"
-            oqas_charts = self.chart_numbers.get('OQAS', set())
-            pattern = re.compile(r'\s(\d+)-\d+$')
-            excluded = 0
-
-            if oqas_charts:
-                lasik_items = []
+            # 1) 날짜폴더 스캔
+            if os.path.exists(today_folder):
+                items = os.listdir(today_folder)
                 for item in items:
-                    match = pattern.search(item)
-                    if match and match.group(1) in oqas_charts:
-                        excluded += 1
-                    else:
-                        lasik_items.append(item)
-                count = len(lasik_items)
-            else:
-                count = total
+                    match = sm_pattern.search(item)
+                    if match:
+                        sightmap_charts.add(match.group(1))
+                log_callback(f"  📂 Sightmap (날짜폴더): {len(items)}건 (차트 {len(sightmap_charts)}명)")
 
-            log_callback(f"  ✓ Sightmap(라식): {count}건 (전체 {total}, OQAS 제외 {excluded})")
+            # 2) 루트에 아직 안 옮겨진 오늘 항목도 스캔
+            today_str = self.today.strftime('%Y%m%d')
+            root_count = 0
+            for item in os.listdir(base_path):
+                item_path = os.path.join(base_path, item)
+                if item.startswith('20') and len(item) == 4 and os.path.isdir(item_path):
+                    continue
+                if item.startswith('Log') or item == 'Thumbs.db':
+                    continue
+                try:
+                    mtime = os.path.getmtime(item_path)
+                    if time.strftime('%Y%m%d', time.localtime(mtime)) != today_str:
+                        continue
+                except OSError:
+                    continue
+                root_count += 1
+                match = sm_pattern.search(item)
+                if match:
+                    sightmap_charts.add(match.group(1))
+            if root_count > 0:
+                log_callback(f"  📂 Sightmap (루트): {root_count}건 추가")
+
+            count = len(sightmap_charts)
+            log_callback(f"  ✓ 라식검사: {count}건")
+
             return count
 
         except Exception as e:
-            log_callback(f"  ❌ Sightmap 오류: {str(e)}")
+            log_callback(f"  ❌ 라식검사 오류: {str(e)}")
             return 0
 
     def calculate_glaucoma(self, log_callback) -> int:
@@ -894,10 +1013,12 @@ class DailyReportSystem:
                    result_values: Dict[str, int], log_callback) -> bool:
         """엑셀 파일 작성 (result_values: 모든 항목의 확정된 값)"""
         try:
-            template_file = self.config['template_file']
+            template_file = get_template_path(self.config.get('template_file', ''))
             if not os.path.exists(template_file):
                 log_callback(f"  ❌ 템플릿 파일 없음: {template_file}")
+                log_callback(f"     (exe 옆 또는 번들에 '일일결산_템플릿.xlsx' 필요)")
                 return False
+            log_callback(f"  📄 템플릿: {template_file}")
 
             wb = load_workbook(template_file)
             ws = wb[self.config['target_sheet']]
@@ -1345,8 +1466,18 @@ class DailyReportGUI:
             self.log("=" * 54)
             self.log("")
 
-            # 1. 디렉토리 자동 스캔
-            self.log("[1/3] 디렉토리 자동 스캔 중...")
+            # 1. 파일 자동 분류 (루트 → 날짜폴더 정리, 스캔 전에 실행)
+            self.log("[1/5] 파일 자동 분류 중...")
+            organized = self.system.organize_all_directories(self.log)
+            if organized > 0:
+                self.log(f"  ✓ 총 {organized}건 날짜폴더로 정리 완료")
+            else:
+                self.log(f"  ✓ 정리할 항목 없음 (이미 분류됨)")
+
+            self.log("")
+
+            # 2. 디렉토리 자동 스캔 (날짜폴더에서 카운트)
+            self.log("[2/5] 디렉토리 자동 스캔 중...")
             for equipment_id in self.system.config['equipment'].keys():
                 equipment_name = self.system.config['equipment'][equipment_id]['name']
                 self.log(f"  🔍 {equipment_name} 스캔 중...")
@@ -1358,8 +1489,8 @@ class DailyReportGUI:
 
             self.log("")
 
-            # 2. 특수 항목 계산
-            self.log("[2/4] 특수 항목 계산 중...")
+            # 3. 특수 항목 계산
+            self.log("[3/5] 특수 항목 계산 중...")
 
             glaucoma_count = self.system.calculate_glaucoma(self.log)
             self.log(f"  ✓ 녹내장 (HFA ∩ OCT): {glaucoma_count}건")
@@ -1369,16 +1500,16 @@ class DailyReportGUI:
 
             self.log("")
 
-            # 3. Sightmap(라식) 자동 카운트
-            self.log("[3/4] Sightmap(라식) 스캔 중...")
+            # 4. Sightmap(라식) 자동 카운트
+            self.log("[4/5] Sightmap(라식) 스캔 중...")
             sightmap_count = self.system.count_sightmap(self.log)
 
             self.log("")
 
-            # 4. 수술 예약 조회 (DB 자동 → 엑셀 파일 fallback)
+            # 5. 수술 예약 조회 (DB 자동)
             reservation_counts = {'verion': 0, 'lensx': 0, 'ex500': 0}
 
-            self.log("[4/4] 수술 예약 조회 중...")
+            self.log("[5/5] 수술 예약 조회 중...")
             db_counts = self.system.get_reservation_from_db(target_date, self.log)
 
             if db_counts is not None:
@@ -1403,6 +1534,7 @@ class DailyReportGUI:
             # 결과 Entry 위젯 업데이트
             self.root.after(0, self.update_result_entries)
 
+            self.log("")
             self.log("=" * 54)
             self.log("✅ 스캔 완료! 결과를 확인하고 수정 후 PDF 출력 버튼을 클릭하세요.")
             self.log("=" * 54)
@@ -1479,7 +1611,8 @@ class DailyReportGUI:
             # 엑셀 작성
             self.log("[2/2] 엑셀 파일 작성 및 PDF 생성 중...")
 
-            today_str = date.today().strftime('%Y%m%d')
+            target_date = self.system.today
+            today_str = target_date.strftime('%Y%m%d')
             temp_excel = f"일일결산_{today_str}_temp.xlsx"
 
             success = self.system.write_excel(
@@ -1496,9 +1629,31 @@ class DailyReportGUI:
 
             self.log("")
 
-            # PDF 변환
-            pdf_path = self.system.config['output_pdf'].replace('{date}', today_str)
+            # PDF 변환 - 출력 경로 자동 결정
+            pdf_output_config = self.system.config.get('output_pdf', '')
+            if pdf_output_config:
+                pdf_resolved = pdf_output_config.replace('{date}', today_str)
+                if os.path.isabs(pdf_resolved):
+                    # 절대경로: 드라이브 접근 가능한지 확인
+                    drive = os.path.splitdrive(pdf_resolved)[0]
+                    if drive and os.path.exists(drive + os.sep):
+                        pdf_path = pdf_resolved
+                    else:
+                        pdf_path = os.path.join(get_exe_dir(), 'PDF', f'일일결산_{today_str}.pdf')
+                else:
+                    # 상대경로: exe 위치 기준으로 resolve
+                    pdf_path = os.path.join(get_exe_dir(), pdf_resolved)
+            else:
+                pdf_path = os.path.join(get_exe_dir(), 'PDF', f'일일결산_{today_str}.pdf')
+
+            # PDF 출력 디렉토리 생성
+            os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
+
             pdf_success = self.system.convert_to_pdf(temp_excel, pdf_path, self.log)
+
+            # 결산 완료 후 PDF를 일일결산\YYYY\MM\MM.DD.pdf로 정리
+            if pdf_success and os.path.exists(pdf_path):
+                archive_path = self._organize_settlement_pdf(pdf_path, target_date)
 
             self.log("")
             self.log("=" * 54)
@@ -1529,6 +1684,29 @@ class DailyReportGUI:
 
         finally:
             self.output_button.config(state='normal')
+
+    def _organize_settlement_pdf(self, pdf_path: str, target_date: date) -> Optional[str]:
+        """결산 PDF를 일일결산\YYYY\MM\MM.DD.pdf로 정리 (검사폴더 정리와 동일 패턴)"""
+        try:
+            # PDF 폴더의 상위 = 결산 기본 디렉토리
+            pdf_dir = os.path.dirname(pdf_path)
+            base_dir = os.path.dirname(pdf_dir)  # PDF 폴더의 상위
+
+            archive_dir = os.path.join(base_dir, '일일결산',
+                                       target_date.strftime('%Y'),
+                                       target_date.strftime('%m'))
+            os.makedirs(archive_dir, exist_ok=True)
+
+            archive_name = target_date.strftime('%m.%d') + '.pdf'
+            archive_path = os.path.join(archive_dir, archive_name)
+
+            shutil.copy2(pdf_path, archive_path)
+            self.log(f"  📁 결산 정리: 일일결산/{target_date.strftime('%Y/%m/%m.%d')}.pdf")
+            return archive_path
+
+        except Exception as e:
+            self.log(f"  ⚠️  결산 정리 실패: {str(e)}")
+            return None
 
     def open_settings(self):
         """설정 창 열기"""

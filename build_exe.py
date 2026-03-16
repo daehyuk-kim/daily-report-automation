@@ -36,6 +36,7 @@ options = [
     "--windowed",
     "--icon=NONE",
     "--add-data=config.json;.",
+    "--add-data=일일결산_템플릿.xlsx;.",
     "--hidden-import=openpyxl",
     "--hidden-import=pandas",
     "--hidden-import=xlrd",
@@ -59,12 +60,12 @@ try:
     dist_dir = os.path.abspath("dist")
 
     print("\n" + "=" * 70)
-    print("✅ EXE 파일 생성 완료! (config.json 내장)")
+    print("✅ EXE 파일 생성 완료! (config.json + 템플릿 내장)")
     print("=" * 70)
     print(f"\n위치: {os.path.join(dist_dir, '일일결산자동화.exe')}")
     print("\n배포 방법:")
     print("  일일결산자동화.exe 하나만 복사하면 됩니다.")
-    print("  (설정 변경 필요 시 exe 옆에 config.json을 두면 우선 적용)")
+    print("  (설정/템플릿 변경 시 exe 옆에 해당 파일을 두면 우선 적용)")
 except subprocess.CalledProcessError as e:
     print("\n❌ 빌드 실패")
     print(f"오류: {e}")
