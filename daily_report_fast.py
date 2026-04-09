@@ -92,6 +92,17 @@ def get_bundled_path(filename: str) -> Optional[str]:
     return None
 
 
+def _deep_merge(base: dict, override: dict) -> dict:
+    """base dict에 override를 깊은 병합. override 값이 우선."""
+    merged = base.copy()
+    for key, val in override.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(val, dict):
+            merged[key] = _deep_merge(merged[key], val)
+        else:
+            merged[key] = val
+    return merged
+
+
 def get_config_path() -> str:
     """config.json 경로 결정: exe 옆 외부 파일 우선, 없으면 번들 리소스 사용"""
     external = os.path.join(get_exe_dir(), 'config.json')
@@ -148,10 +159,47 @@ class DailyReportSystem:
             self.compiled_patterns[eq_id] = re.compile(eq_info['pattern'])
 
     def load_config(self, config_path: str) -> dict:
-        """설정 파일 로드"""
+        """설정 파일 로드 (번들 base + 외부 override 병합)
+
+        번들 config.json을 기본값으로 사용하고, exe 옆 외부 config.json이
+        있으면 그 값을 덮어씌움. 외부 config에 없는 키는 번들 기본값 유지.
+        → 새 기능 추가 시 구버전 외부 config 때문에 설정 누락되지 않음.
+        """
+        def _deep_merge(base: dict, override: dict) -> dict:
+            merged = base.copy()
+            for key, val in override.items():
+                if key in merged and isinstance(merged[key], dict) and isinstance(val, dict):
+                    merged[key] = _deep_merge(merged[key], val)
+                else:
+                    merged[key] = val
+            return merged
+
         try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            # 1) 번들 config 로드 (base)
+            bundled_path = get_bundled_path('config.json')
+            bundled_config = {}
+            if bundled_path:
+                with open(bundled_path, 'r', encoding='utf-8') as f:
+                    bundled_config = json.load(f)
+
+            # 2) 외부 config 로드 (override)
+            external_config = {}
+            if os.path.exists(config_path) and config_path != bundled_path:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    external_config = json.load(f)
+
+            # 3) 병합: 번들(base) + 외부(override)
+            if bundled_config and external_config:
+                return _deep_merge(bundled_config, external_config)
+            elif external_config:
+                return external_config
+            elif bundled_config:
+                return bundled_config
+            else:
+                # 둘 다 없으면 config_path에서 직접 로드 시도
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+
         except FileNotFoundError:
             messagebox.showerror("오류", f"설정 파일을 찾을 수 없습니다: {config_path}")
             sys.exit(1)
@@ -206,8 +254,7 @@ class DailyReportSystem:
             all_employees = response.json()
             exam_staff = [
                 emp for emp in all_employees
-                if emp.get('team') == dept and emp.get('status') == 'active'
-                and not emp.get('isRetired')
+                if emp.get('team') == dept and not emp.get('isRetired')
             ]
             exam_ids = {emp['id']: emp['name'] for emp in exam_staff}
 
@@ -586,6 +633,44 @@ class DailyReportSystem:
                                 if self.is_valid_chart_number(chart_num):
                                     chart_numbers.add(chart_num)
 
+                date_folder_count = len(chart_numbers)
+
+                # 루트에 미정리 항목 추가 스캔 (분류 후에도 새로 생긴 파일/폴더)
+                if scan_type == 'both' and today_folder != base_path:
+                    today_str = self.today.strftime('%Y%m%d')
+                    root_extra = 0
+                    try:
+                        for item in os.listdir(base_path):
+                            item_path = os.path.join(base_path, item)
+                            if os.path.isdir(item_path) and re.match(r'^(20\d{2}|\d{2}\.\d{2})$', item):
+                                continue
+                            try:
+                                mtime = os.path.getmtime(item_path)
+                                if time.strftime('%Y%m%d', time.localtime(mtime)) != today_str:
+                                    continue
+                            except OSError:
+                                continue
+
+                            if os.path.isdir(item_path):
+                                match = pattern.search(item)
+                                if match:
+                                    chart_num = self.extract_chart_number(match)
+                                    if self.is_valid_chart_number(chart_num) and chart_num not in chart_numbers:
+                                        chart_numbers.add(chart_num)
+                                        root_extra += 1
+                            elif os.path.isfile(item_path):
+                                if any(item.lower().endswith(ext) for ext in self.config['validation']['file_extensions']):
+                                    match = pattern.search(item)
+                                    if match:
+                                        chart_num = self.extract_chart_number(match)
+                                        if self.is_valid_chart_number(chart_num) and chart_num not in chart_numbers:
+                                            chart_numbers.add(chart_num)
+                                            root_extra += 1
+                    except Exception as e:
+                        log_callback(f"     ⚠️  루트 추가 스캔 오류: {e}")
+                    if root_extra > 0:
+                        log_callback(f"     📂 루트 미정리: +{root_extra}건 추가")
+
             # 로그 출력 (실시간 스캔은 위에서 이미 출력)
             if not (scan_type == 'both' and is_realtime_scan):
                 if scan_type == 'both':
@@ -599,43 +684,72 @@ class DailyReportSystem:
         return chart_numbers
 
     def organize_directory(self, base_path, folder_structure, log_callback) -> int:
-        """daehyuk.py 로직: 루트의 flat 항목을 날짜폴더로 정리 (배치 대체)"""
+        """루트의 flat 항목을 날짜폴더로 정리. 해당 날짜폴더가 이미 있으면 삭제."""
         if not os.path.exists(base_path):
+            log_callback(f"    ⚠️  경로 접근 불가: {base_path}")
             return 0
 
-        target_folder = self._resolve_date_folder(folder_structure)
-        target_path = os.path.join(base_path, target_folder)
-        today_str = self.today.strftime('%Y%m%d')
         moved = 0
+        deleted = 0
+        candidates = 0
 
         for item in os.listdir(base_path):
             item_path = os.path.join(base_path, item)
             # skip year/month folders, log files, Thumbs.db
             if os.path.isdir(item_path) and re.match(r'^(20\d{2}|\d{2}\.\d{2})$', item):
                 continue
-            if item.startswith('Log') or item == 'Thumbs.db':
+            if item.startswith('Log') or item == 'Thumbs.db' or item.startswith('HFABackups') or item == 'RXML':
                 continue
-            # check modification date matches target date
+            # get file date from mtime
             try:
                 mtime = os.path.getmtime(item_path)
-                if time.strftime('%Y%m%d', time.localtime(mtime)) != today_str:
-                    continue
+                file_date = date.fromtimestamp(mtime)
             except OSError:
-                continue
-            # create target folder and move
-            if not os.path.exists(target_path):
-                os.makedirs(target_path, exist_ok=True)
-            try:
-                dest = os.path.join(target_path, item)
-                if os.path.exists(dest):
-                    log_callback(f"    ⚠️ 이미 존재: {item}")
-                    continue
-                shutil.move(item_path, target_path)
-                moved += 1
-            except Exception as e:
-                log_callback(f"    ❌ 이동 실패: {item} → {str(e)}")
+                log_callback(f"    ⚠️  mtime 읽기 실패: {item}")
                 continue
 
+            candidates += 1
+
+            # resolve target folder for this file's date
+            fs = folder_structure
+            file_folder = fs.replace('YYYY', file_date.strftime('%Y')).replace('MM', file_date.strftime('%m')).replace('DD', file_date.strftime('%d'))
+            target_path = os.path.join(base_path, file_folder)
+
+            # if date folder already exists, this is a duplicate → delete
+            if os.path.exists(target_path):
+                dest = os.path.join(target_path, item)
+                if os.path.exists(dest):
+                    # exact same file already in date folder → safe to delete root copy
+                    try:
+                        if os.path.isdir(item_path):
+                            shutil.rmtree(item_path)
+                        else:
+                            os.remove(item_path)
+                        deleted += 1
+                    except Exception as e:
+                        log_callback(f"    ❌ 삭제 실패: {item} → {str(e)}")
+                    continue
+                # date folder exists but file not in it → move
+                try:
+                    shutil.move(item_path, target_path)
+                    moved += 1
+                except Exception as e:
+                    log_callback(f"    ❌ 이동 실패: {item} → {str(e)}")
+            else:
+                # no date folder → create and move
+                os.makedirs(target_path, exist_ok=True)
+                try:
+                    shutil.move(item_path, target_path)
+                    moved += 1
+                except Exception as e:
+                    log_callback(f"    ❌ 이동 실패: {item} → {str(e)}")
+
+        if candidates == 0:
+            log_callback(f"    (루트에 정리 대상 없음)")
+        elif moved == 0 and deleted == 0:
+            log_callback(f"    ⚠️  대상 {candidates}건 있었으나 이동/삭제 0건")
+        if deleted > 0:
+            log_callback(f"    🗑️ 중복 {deleted}건 삭제")
         return moved
 
     def organize_all_directories(self, log_callback):
@@ -646,17 +760,86 @@ class DailyReportSystem:
             if item.get('path') and item.get('folder_structure'):
                 targets.append((item['name'], item['path'], item['folder_structure']))
 
+        if not targets:
+            log_callback("  ⚠️  auto_organize 설정이 비어있음!")
+            return 0
+
+        log_callback(f"  대상: {', '.join(t[0] for t in targets)}")
+
         total_moved = 0
         for name, path, fs in targets:
+            target_folder = self._resolve_date_folder(fs)
+            log_callback(f"  📂 {name}: {path}")
+            log_callback(f"     날짜폴더: {target_folder}")
+            if not os.path.exists(path):
+                log_callback(f"     ⚠️  경로 접근 불가")
+                continue
             moved = self.organize_directory(path, fs, log_callback)
             if moved > 0:
-                log_callback(f"  📁 {name}: {moved}건 정리 완료")
+                log_callback(f"     ✓ {moved}건 → {target_folder} 이동 완료")
                 total_moved += moved
+            else:
+                log_callback(f"     ✓ 정리 대상 없음")
 
         return total_moved
 
+    def _get_hfa_scr_charts(self, log_callback) -> set:
+        """HFA 폴더에서 SCR 파일이 있는 차트번호 집합 반환 (날짜폴더 + 루트 둘 다 확인)"""
+        hfa_config = self.config['equipment'].get('HFA', {})
+        if not hfa_config:
+            return set()
+
+        hfa_base = hfa_config['path']
+        if not os.path.exists(hfa_base):
+            return set()
+
+        scr_charts = set()
+        hfa_pattern = re.compile(r'^(\d{5,6})_')
+        today_str = self.today.strftime('%Y%m%d')
+
+        def _scan_folder_for_scr(folder, check_mtime=False):
+            """Scan a folder for patient dirs with SCR files"""
+            try:
+                for item in os.listdir(folder):
+                    item_path = os.path.join(folder, item)
+                    if not os.path.isdir(item_path):
+                        continue
+                    if item.startswith('20') and len(item) == 4:
+                        continue
+
+                    if check_mtime:
+                        try:
+                            mtime = os.path.getmtime(item_path)
+                            if time.strftime('%Y%m%d', time.localtime(mtime)) != today_str:
+                                continue
+                        except OSError:
+                            continue
+
+                    match = hfa_pattern.match(item)
+                    if match:
+                        chart_num = match.group(1)
+                        try:
+                            for f in os.listdir(item_path):
+                                if 'SCR' in f.upper():
+                                    scr_charts.add(chart_num)
+                                    break
+                        except OSError:
+                            pass
+            except Exception as e:
+                log_callback(f"  ⚠️  HFA SCR 스캔 오류: {e}")
+
+        # 1) 날짜폴더 스캔
+        hfa_folder = self.get_today_folder_path(hfa_base, 'HFA')
+        if hfa_folder:
+            _scan_folder_for_scr(hfa_folder)
+
+        # 2) 루트에 미정리 폴더도 스캔 (mtime 필터)
+        _scan_folder_for_scr(hfa_base, check_mtime=True)
+
+        return scr_charts
+
     def count_sightmap(self, log_callback) -> int:
-        """라식검사 카운트: Sightmap 고유 차트 수 = 라식 건수"""
+        """라식검사 카운트: Sightmap ∩ HFA(SCR) 교집합"""
         sm_config = self.config.get('sightmap', {})
         if not sm_config:
             return 0
@@ -706,13 +889,73 @@ class DailyReportSystem:
             if root_count > 0:
                 log_callback(f"  📂 Sightmap (루트): {root_count}건 추가")
 
-            count = len(sightmap_charts)
-            log_callback(f"  ✓ 라식검사: {count}건")
+            log_callback(f"  📋 Sightmap 차트: {len(sightmap_charts)}명")
+
+            # 3) HFA 폴더에서 SCR 파일이 있는 차트 수집
+            hfa_scr_charts = self._get_hfa_scr_charts(log_callback)
+            log_callback(f"  📋 HFA SCR 차트: {len(hfa_scr_charts)}명")
+
+            # 4) 교집합: Sightmap ∩ HFA(SCR) = 라식검사
+            lasik_charts = sightmap_charts & hfa_scr_charts
+            count = len(lasik_charts)
+            log_callback(f"  ✓ 라식검사 (Sightmap ∩ HFA SCR): {count}건")
 
             return count
 
         except Exception as e:
             log_callback(f"  ❌ 라식검사 오류: {str(e)}")
+            return 0
+
+    def count_octs(self, log_callback) -> int:
+        """OCTS 카운트: patients3 폴더에서 오늘 수정된 .pat 폴더 수"""
+        octs_config = self.config.get('octs', {})
+        if not octs_config:
+            log_callback(f"  ⚠️  OCTS 설정 없음 (config.json에 'octs' 항목 필요)")
+            return 0
+
+        base_path = octs_config['path']
+        log_callback(f"  📂 OCTS 경로: {base_path}")
+
+        if not os.path.exists(base_path):
+            log_callback(f"  ⚠️  OCTS 경로 접근 불가: {base_path}")
+            return 0
+
+        try:
+            today_str = self.today.strftime('%Y%m%d')
+            log_callback(f"  📅 검색 날짜: {today_str}")
+
+            count = 0
+            total_pat = 0
+            total_items = 0
+            matched_names = []
+
+            with os.scandir(base_path) as entries:
+                for entry in entries:
+                    total_items += 1
+                    if entry.is_dir() and entry.name.endswith('.pat'):
+                        total_pat += 1
+                        try:
+                            mtime = entry.stat().st_mtime
+                            mdate_str = time.strftime('%Y%m%d', time.localtime(mtime))
+                            if mdate_str == today_str:
+                                count += 1
+                                if len(matched_names) < 5:
+                                    matched_names.append(entry.name)
+                        except OSError:
+                            continue
+
+            log_callback(f"  📊 전체 항목: {total_items}개 / .pat 폴더: {total_pat}개")
+            log_callback(f"  📊 오늘({today_str}) 수정된 .pat: {count}개")
+            if matched_names:
+                log_callback(f"  📋 매칭 샘플: {', '.join(matched_names[:5])}" + (f" 외 {count-5}개" if count > 5 else ""))
+
+            log_callback(f"  ✓ OCTS: {count}건")
+            return count
+
+        except Exception as e:
+            log_callback(f"  ❌ OCTS 카운트 오류: {str(e)}")
+            import traceback
+            log_callback(f"  ❌ 상세: {traceback.format_exc().splitlines()[-2]}")
             return 0
 
     def calculate_glaucoma(self, log_callback) -> int:
@@ -1084,35 +1327,59 @@ class DailyReportSystem:
             log_callback("  ⚠️  pywin32가 없어 PDF 변환 불가")
             return False
 
+        import gc
+
+        excel = None
+        wb = None
+
         try:
             os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
 
             # COM 라이브러리 초기화
             pythoncom.CoInitialize()
 
-            try:
-                excel = win32com.client.Dispatch("Excel.Application")
-                excel.Visible = False
-                excel.DisplayAlerts = False
+            excel = win32com.client.Dispatch("Excel.Application")
+            excel.Visible = False
+            excel.DisplayAlerts = False
 
-                wb = excel.Workbooks.Open(os.path.abspath(excel_path))
-                ws = wb.Worksheets(self.config['target_sheet'])
+            wb = excel.Workbooks.Open(os.path.abspath(excel_path))
+            ws = wb.Worksheets(self.config['target_sheet'])
 
-                ws.ExportAsFixedFormat(0, os.path.abspath(pdf_path))
+            ws.ExportAsFixedFormat(0, os.path.abspath(pdf_path))
 
-                wb.Close(SaveChanges=False)
-                excel.Quit()
+            wb.Close(SaveChanges=False)
+            wb = None
 
-                log_callback(f"  ✓ PDF 생성 완료: {pdf_path}")
-                return True
+            excel.Quit()
+            excel = None
 
-            finally:
-                # COM 라이브러리 정리
-                pythoncom.CoUninitialize()
+            # COM 참조 완전 해제 후 파일 flush 보장
+            gc.collect()
+
+            log_callback(f"  ✓ PDF 생성 완료: {pdf_path}")
+            return True
 
         except Exception as e:
             log_callback(f"  ❌ PDF 변환 오류: {str(e)}")
+            # 예외 시에도 Excel 프로세스 정리
+            try:
+                if wb:
+                    wb.Close(SaveChanges=False)
+            except:
+                pass
+            try:
+                if excel:
+                    excel.Quit()
+            except:
+                pass
             return False
+
+        finally:
+            # COM 참조 명시적 해제
+            wb = None
+            excel = None
+            gc.collect()
+            pythoncom.CoUninitialize()
 
 
 class DailyReportGUI:
@@ -1232,7 +1499,7 @@ class DailyReportGUI:
         self.staff_count_label.grid(row=0, column=3, padx=(10, 0), sticky=tk.W)
 
         # 직원 체크박스 프레임 (스크롤 가능)
-        staff_canvas = tk.Canvas(left_frame, height=100)
+        staff_canvas = tk.Canvas(left_frame, height=150)
         staff_scrollbar = ttk.Scrollbar(left_frame, orient="vertical", command=staff_canvas.yview)
         self.staff_scrollable = ttk.Frame(staff_canvas)
 
@@ -1255,40 +1522,32 @@ class DailyReportGUI:
         # 날짜 입력 필드에 Enter 키 바인딩
         self.date_entry.bind('<Return>', lambda e: self.refresh_staff_list())
 
-        # 2. 수기 입력 (FAG, 안경검사, OCTS만 남음)
+        # 2. 수기 입력 (FAG, 안경검사)
         ttk.Separator(left_frame, orient='horizontal').grid(row=5, column=0, columnspan=2,
                                                              sticky=(tk.W, tk.E), pady=10)
 
         manual_label = ttk.Label(left_frame, text="✍ 수기 입력", font=("", 12, "bold"))
-        manual_label.grid(row=6, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
+        manual_label.grid(row=6, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
 
-        fag_label = ttk.Label(left_frame, text="FAG:")
-        fag_label.grid(row=7, column=0, sticky=tk.W, padx=(0, 5))
+        manual_frame = ttk.Frame(left_frame)
+        manual_frame.grid(row=7, column=0, columnspan=2, sticky=tk.W)
 
-        self.fag_entry = ttk.Entry(left_frame, width=10)
+        ttk.Label(manual_frame, text="FAG:").pack(side=tk.LEFT, padx=(0, 3))
+        self.fag_entry = ttk.Entry(manual_frame, width=5)
         self.fag_entry.insert(0, "0")
-        self.fag_entry.grid(row=7, column=1, sticky=tk.W, pady=3)
+        self.fag_entry.pack(side=tk.LEFT, padx=(0, 15))
 
-        glasses_label = ttk.Label(left_frame, text="안경검사:")
-        glasses_label.grid(row=8, column=0, sticky=tk.W, padx=(0, 5))
-
-        self.glasses_entry = ttk.Entry(left_frame, width=10)
+        ttk.Label(manual_frame, text="안경:").pack(side=tk.LEFT, padx=(0, 3))
+        self.glasses_entry = ttk.Entry(manual_frame, width=5)
         self.glasses_entry.insert(0, "0")
-        self.glasses_entry.grid(row=8, column=1, sticky=tk.W, pady=3)
-
-        octs_label = ttk.Label(left_frame, text="OCTS:")
-        octs_label.grid(row=9, column=0, sticky=tk.W, padx=(0, 5))
-
-        self.octs_entry = ttk.Entry(left_frame, width=10)
-        self.octs_entry.insert(0, "0")
-        self.octs_entry.grid(row=9, column=1, sticky=tk.W, pady=3)
+        self.glasses_entry.pack(side=tk.LEFT)
 
         # 3. 스캔 버튼
-        ttk.Separator(left_frame, orient='horizontal').grid(row=10, column=0, columnspan=2,
+        ttk.Separator(left_frame, orient='horizontal').grid(row=8, column=0, columnspan=2,
                                                              sticky=(tk.W, tk.E), pady=10)
 
         self.scan_button = ttk.Button(left_frame, text="🔍 스캔 시작", command=self.run_scan)
-        self.scan_button.grid(row=11, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=8)
+        self.scan_button.grid(row=9, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=8)
 
         # === 중간 영역 구성 (스캔 결과) ===
 
@@ -1350,9 +1609,8 @@ class DailyReportGUI:
         for widget in self.staff_scrollable.winfo_children():
             widget.destroy()
 
-        # fallback: config에서 가져오기 (전원 체크)
         if all_staff is None:
-            all_staff = self.system.config.get('staff_list', [])
+            all_staff = []
         if working_staff is None:
             working_staff = all_staff
 
@@ -1385,7 +1643,7 @@ class DailyReportGUI:
                 target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
             except ValueError:
                 self.api_status_label.config(text="날짜 형식 오류", foreground="red")
-                self.load_staff_list()
+                self.load_staff_list([], [])
                 return
 
             # API에서 직원 목록 가져오기
@@ -1401,17 +1659,16 @@ class DailyReportGUI:
                 status += ")"
                 self.api_status_label.config(text=status, foreground="green")
             else:
-                # API 실패 → config 전체 사용 (실제 에러 표시)
-                self.load_staff_list()
+                # API 실패 → 빈 목록 + 에러 표시 (🔄 버튼으로 재시도)
+                self.load_staff_list([], [])
                 error_detail = getattr(self.system, '_last_api_error', None) or '알 수 없는 오류'
                 self.api_status_label.config(
-                    text=f"⚠ API 실패: {error_detail}",
-                    foreground="orange"
+                    text=f"⚠ API 실패: {error_detail} (🔄 재시도)",
+                    foreground="red"
                 )
         except Exception as e:
-            # 예외 발생 → config 전체 사용
-            self.load_staff_list()
-            self.api_status_label.config(text=f"⚠ 오류: {str(e)[:50]}", foreground="red")
+            self.load_staff_list([], [])
+            self.api_status_label.config(text=f"⚠ 오류: {str(e)[:50]} (🔄 재시도)", foreground="red")
 
     def log(self, message: str):
         """로그 메시지 출력 (화면 + 파일) - 스레드 안전"""
@@ -1467,7 +1724,7 @@ class DailyReportGUI:
             self.log("")
 
             # 1. 파일 자동 분류 (루트 → 날짜폴더 정리, 스캔 전에 실행)
-            self.log("[1/5] 파일 자동 분류 중...")
+            self.log("[1/6] 파일 자동 분류 중...")
             organized = self.system.organize_all_directories(self.log)
             if organized > 0:
                 self.log(f"  ✓ 총 {organized}건 날짜폴더로 정리 완료")
@@ -1477,39 +1734,62 @@ class DailyReportGUI:
             self.log("")
 
             # 2. 디렉토리 자동 스캔 (날짜폴더에서 카운트)
-            self.log("[2/5] 디렉토리 자동 스캔 중...")
+            self.log("[2/6] 디렉토리 자동 스캔 중...")
             for equipment_id in self.system.config['equipment'].keys():
-                equipment_name = self.system.config['equipment'][equipment_id]['name']
-                self.log(f"  🔍 {equipment_name} 스캔 중...")
+                eq_config = self.system.config['equipment'][equipment_id]
+                equipment_name = eq_config['name']
+                eq_path = eq_config['path']
+                eq_scan_type = eq_config.get('scan_type', 'file')
+                self.log(f"  ─────────────────────────────────")
+                self.log(f"  🔍 {equipment_name} ({equipment_id}) 스캔 중...")
+                self.log(f"     경로: {eq_path}")
+                self.log(f"     스캔타입: {eq_scan_type} / 패턴: {eq_config.get('pattern', 'N/A')}")
 
                 chart_set = self.system.scan_directory_fast(equipment_id, self.log)
                 self.system.chart_numbers[equipment_id] = chart_set
 
-                self.log(f"  ✓ {equipment_name}: {len(chart_set)}건")
+                # Show sample chart numbers for verification
+                if chart_set:
+                    sample = sorted(list(chart_set))[:5]
+                    self.log(f"  ✓ {equipment_name}: {len(chart_set)}건 (샘플: {', '.join(sample)}" + (f" 외 {len(chart_set)-5}개" if len(chart_set) > 5 else "") + ")")
+                else:
+                    self.log(f"  ✓ {equipment_name}: 0건")
 
             self.log("")
 
             # 3. 특수 항목 계산
-            self.log("[3/5] 특수 항목 계산 중...")
+            self.log("[3/6] 특수 항목 계산 중...")
 
+            hfa_count = len(self.system.chart_numbers.get('HFA', set()))
+            oct_count = len(self.system.chart_numbers.get('OCT', set()))
             glaucoma_count = self.system.calculate_glaucoma(self.log)
-            self.log(f"  ✓ 녹내장 (HFA ∩ OCT): {glaucoma_count}건")
+            self.log(f"  ✓ 녹내장 (HFA {hfa_count}건 ∩ OCT {oct_count}건): {glaucoma_count}건")
 
             fundus_count = self.system.calculate_fundus(self.log)
             self.log(f"  ✓ 안저: {fundus_count}건")
 
             self.log("")
 
-            # 4. Sightmap(라식) 자동 카운트
-            self.log("[4/5] Sightmap(라식) 스캔 중...")
+            # 4. Sightmap(라식) + OCTS 자동 카운트
+            self.log("[4/6] Sightmap(라식) 스캔 중...")
             sightmap_count = self.system.count_sightmap(self.log)
 
             self.log("")
 
-            # 5. 수술 예약 조회 (DB 자동)
+            # 5. OCTS 자동 카운트
+            self.log("[5/6] OCTS 스캔 중...")
+            octs_count = self.system.count_octs(self.log)
+            # OCT + OCTS 합산 로그
+            oct_cirrus = len(self.system.chart_numbers.get('OCT', set()))
+            self.log(f"  ─────────────────────────────────")
+            self.log(f"  📊 OCT 합산: Cirrus {oct_cirrus}건 + OCTS {octs_count}건 = {oct_cirrus + octs_count}건")
+
+            self.log("")
+
+            # 6. 수술 예약 조회 (DB 자동)
             reservation_counts = {'verion': 0, 'lensx': 0, 'ex500': 0}
 
-            self.log("[5/5] 수술 예약 조회 중...")
+            self.log("[6/6] 수술 예약 조회 중...")
             db_counts = self.system.get_reservation_from_db(target_date, self.log)
 
             if db_counts is not None:
@@ -1528,13 +1808,28 @@ class DailyReportGUI:
                 'glaucoma_count': glaucoma_count,
                 'fundus_count': fundus_count,
                 'sightmap_count': sightmap_count,
+                'octs_count': octs_count,
                 'reservation_counts': reservation_counts
             }
 
             # 결과 Entry 위젯 업데이트
             self.root.after(0, self.update_result_entries)
 
+            # 최종 결과 요약 로그
             self.log("")
+            self.log("=" * 54)
+            self.log("📋 최종 스캔 결과 요약")
+            self.log("=" * 54)
+            for eq_id in self.system.config['equipment'].keys():
+                eq_name = self.system.config['equipment'][eq_id]['name']
+                cnt = len(self.system.chart_numbers.get(eq_id, set()))
+                self.log(f"  {eq_name}({eq_id}): {cnt}건")
+            oct_total = len(self.system.chart_numbers.get('OCT', set())) + octs_count
+            self.log(f"  ─────────────────────────────────")
+            self.log(f"  OCT 합산 (Cirrus+OCTS): {oct_total}건")
+            self.log(f"  녹내장: {glaucoma_count}건 / 안저: {fundus_count}건")
+            self.log(f"  라식검사: {sightmap_count}건")
+            self.log(f"  Verion: {reservation_counts['verion']} / LensX: {reservation_counts['lensx']} / EX500: {reservation_counts['ex500']}")
             self.log("=" * 54)
             self.log("✅ 스캔 완료! 결과를 확인하고 수정 후 PDF 출력 버튼을 클릭하세요.")
             self.log("=" * 54)
@@ -1550,10 +1845,11 @@ class DailyReportGUI:
     def update_result_entries(self):
         """스캔 결과를 Entry 위젯에 표시하고 편집 가능하게 설정"""
         # 각 항목의 값 설정
+        octs_count = self.scan_results.get('octs_count', 0)
         entry_values = {
             'OQAS': len(self.system.chart_numbers.get('OQAS', set())),
             'HFA': len(self.system.chart_numbers.get('HFA', set())),
-            'OCT': len(self.system.chart_numbers.get('OCT', set())) + int(self.octs_entry.get() or 0),
+            'OCT': len(self.system.chart_numbers.get('OCT', set())) + octs_count,
             'ORB': len(self.system.chart_numbers.get('ORB', set())),
             'SP': len(self.system.chart_numbers.get('SP', set())),
             'TOPO': len(self.system.chart_numbers.get('TOPO', set())),

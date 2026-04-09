@@ -101,6 +101,12 @@
     "comment": "날짜별 폴더 안의 항목 수 = 라식 건수"
   },
 
+  "octs": {
+    "name": "OCTS",
+    "path": "\\\\192.168.0.205\\patients3",
+    "comment": "patients3 폴더의 오늘 수정된 .pat 폴더 수 = OCTS 건수"
+  },
+
   "auto_organize": [
     {"name": "내피", "path": "\\\\192.168.0.120\\sp", "folder_structure": "YYYY\\MM\\MM.DD"},
     {"name": "시야", "path": "\\\\192.168.0.120\\hfa", "folder_structure": "YYYY\\MM\\MM.DD"},
@@ -112,16 +118,15 @@
 
   "manual_input": {
     "FAG": {"row": 18, "col": 3},
-    "안경검사": {"row": 17, "col": 3},
-    "OCTS": {"row": null, "col": null, "add_to": "OCT", "comment": "OCT 자동 집계 + OCTS 수기입력 = 최종 OCT"}
+    "안경검사": {"row": 17, "col": 3}
   },
 
   "combined_items": {
     "OCT_TOTAL": {
       "auto_source": "OCT",
-      "manual_source": "OCTS",
+      "auto_source_2": "OCTS",
       "target_cell": {"row": 12, "col": 3},
-      "comment": "OCT 자동 스캔 + OCTS 수기 입력 합산"
+      "comment": "OCT(Cirrus) 자동 스캔 + OCTS(patients3) 자동 스캔 합산"
     }
   },
 
@@ -136,12 +141,6 @@
     "department": "검사실",
     "comment": "내부망 우선 시도 → 외부 URL 폴백"
   },
-
-  "staff_list": [
-    "김창범", "김수지", "김대혁", "김민지",
-    "박현진", "고은서", "김현호", "임량현",
-    "유예나", "김태호", "김수민"
-  ],
 
   "emr_db": {
     "server": "192.168.0.173",
